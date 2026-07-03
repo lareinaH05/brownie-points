@@ -1,0 +1,1929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>BROWNIE POINTS</title>
+<meta name="theme-color" content="#241f4e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Brownie Pts" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>" />
+<style>
+  html, body { margin: 0; padding: 0; background: #241f4e; }
+  #boot { color: #ffc945; font-family: monospace; text-align: center; padding: 40vh 16px 0; font-size: 14px; letter-spacing: 2px; }
+  #errbox { display: none; margin: 24px auto 0; max-width: 480px; background: #fff; color: #b00020; text-align: left;
+            font-family: monospace; font-size: 12px; padding: 12px; border-radius: 8px; word-break: break-all; }
+</style>
+<script>
+  window.__showErr = function (msg) {
+    var box = document.getElementById("errbox");
+    if (box) { box.style.display = "block"; box.textContent = "ERROR: " + msg; }
+  };
+  window.onerror = function (msg, src, line) {
+    window.__showErr(msg + (src ? " @ " + src.split("/").pop() + ":" + line : ""));
+  };
+  window.__cdnFail = function (name) { window.__showErr("CDN failed to load: " + name); };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" onerror="__cdnFail('react')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" onerror="__cdnFail('react-dom')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js" onerror="__cdnFail('babel')"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" onerror="__cdnFail('firebase-app')"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js" onerror="__cdnFail('firebase-db')"></script>
+<script>
+  // Firebase is optional here: the app boots over plain HTTPS and upgrades to realtime when possible
+  try {
+    if (typeof firebase !== "undefined") {
+      firebase.initializeApp({
+        apiKey: "AIzaSyDdekEOVPqEpwG4q39SOvrZB2HzDLirboI",
+        authDomain: "brownie-points-e287c.firebaseapp.com",
+        databaseURL: "https://brownie-points-e287c-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "brownie-points-e287c",
+        storageBucket: "brownie-points-e287c.firebasestorage.app",
+        messagingSenderId: "570312457050",
+        appId: "1:570312457050:web:4c7115ec011ff7cec71163"
+      });
+      window.db = firebase.database();
+    }
+  } catch (e) { /* REST mode will carry the app */ }
+</script>
+</head>
+<body>
+<div id="root"><div id="boot">LOADING...<div id="errbox"></div></div></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ---------- Game config ----------
+const LEVEL_THRESHOLDS = [0, 200, 500, 1000, 1800, 3000, 4800, 7200, 10500, 15000]; // cumulative XP → LV1~LV10
+const MAX_LEVEL = LEVEL_THRESHOLDS.length;
+
+const DEFAULT_TASKS = [
+  { id: "t1", name: "Check in about ur plans", xp: 15 },
+  { id: "t2", name: "Share about ur day", xp: 15 },
+  { id: "t3", name: "Initiate hanging out", xp: 30 },
+  { id: "t4", name: "Plan a proper date", xp: 60, note: "Only when you're off work and have the energy — otherwise just keep things as usual" },
+  { id: "t5", name: "Keep ur words", xp: 25 },
+  { id: "t6", name: "Drive me home", xp: 25 },
+];
+
+const DEFAULT_PENALTIES = [
+  { id: "p1", name: "Lying to me", xp: 100, note: "She accepts any reason where you put yourself first — as long as you're honest about it. e.g. it's your day off and you'd rather stay home and rest than go on a date" },
+  { id: "p2", name: "Stood her up", xp: 120 },
+  { id: "p3", name: "Disrespecting me", xp: 80 },
+  { id: "p4", name: "Not communicating properly", xp: 50 },
+];
+
+const DEFAULT_REWARDS = {
+  2: "Bubble tea on me 🧋",
+  3: "I'll text you first all day",
+  4: "I'll do one thing you pick",
+  5: "I'll plan an outing for us",
+  6: "Homemade treats 🍪",
+  7: "Mystery surprise",
+  8: "A full day of my attention",
+  9: "Reward depends on my mood 😏",
+  10: "Grand prize (classified) 👑",
+};
+
+const DEFAULT_ACHIEVEMENTS = [
+  { id: "a1", taskId: "t1", target: 15, reward: "Dinner on me 🍜", claimed: false },
+  { id: "a2", taskId: "t2", target: 15, reward: "Lazy afternoon together", claimed: false },
+  { id: "a3", taskId: "t3", target: 8, reward: "I'll plan our next hangout", claimed: false },
+  { id: "a4", taskId: "t4", target: 3, reward: "Next date is fully on me", claimed: false },
+  { id: "a5", taskId: "t5", target: 20, reward: "Trust jackpot: mystery reward 🎁", claimed: false },
+  { id: "a6", taskId: "t6", target: 10, reward: "Road-trip snacks on me 🍫", claimed: false },
+];
+
+const GAME_PATH = "games/lrn0308-k7q2x9fw3m/shared"; // secret random path for your game data
+const DB_ROOT = "https://brownie-points-e287c-default-rtdb.asia-southeast1.firebasedatabase.app";
+const REST_URL = DB_ROOT + "/" + GAME_PATH + ".json";
+const ADMIN_PIN = "0308"; // only this code opens Game Master
+const ROLE_KEY = "bp-role-v1";     // personal (this device): remembers which side you are
+const SEEN_KEY = "bp-seen-v1";     // personal (this device): seen notifications
+
+// Firebase strips empty arrays/objects, so re-fill them on read
+const normalizeShared = (data) => {
+  const base = { ...DEFAULT_SHARED, ...(data || {}) };
+  ["tasks", "penalties", "achievements", "hiddenTasks", "log", "requests", "proposals", "wishes", "coupons"].forEach(
+    (k) => { if (!Array.isArray(base[k])) base[k] = Object.values(base[k] || {}); }
+  );
+  ["taskCounts", "claimed", "rewards"].forEach((k) => { if (!base[k]) base[k] = {}; });
+  return base;
+};
+
+const DEFAULT_SHARED = {
+  pin: null,
+  tasks: DEFAULT_TASKS,
+  penalties: DEFAULT_PENALTIES,
+  rewards: DEFAULT_REWARDS,
+  achievements: DEFAULT_ACHIEVEMENTS,
+  hiddenTasks: [],
+  taskCounts: {},
+  totalXP: 0,
+  claimed: {},
+  log: [],
+  requests: [],   // {id, taskId, name, xp, time, status: pending|approved|declined}
+  proposals: [],  // {id, name, time, status: pending|approved|declined}
+  wishes: [],     // {id, text, time, status: pending|approved|declined, assignedTo}
+  coupons: [],    // {id, achievementId, questName, reward, useDate, time, ts, status: pending|fulfilled}
+};
+
+function levelFromXP(xp) {
+  let lv = 1;
+  for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+    if (xp >= LEVEL_THRESHOLDS[i]) lv = i + 1;
+  }
+  return lv;
+}
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+const now = () =>
+  new Date().toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// ---------- Style tokens ----------
+const C = {
+  bg: "#241f4e",
+  panel: "#fff8e7",
+  ink: "#2b2350",
+  pink: "#ff6b81",
+  gold: "#ffc945",
+  mint: "#59d6a2",
+  red: "#e84855",
+  dim: "#8a84b8",
+};
+const pixelFont = "'Press Start 2P', monospace";
+const bodyFont = "'Outfit', sans-serif";
+
+function BrowniePoints() {
+  const [shared, setShared] = useState(null);
+  const [role, setRole] = useState(null); // 'player' | 'admin' | null
+  const [booted, setBooted] = useState(false);
+  const [tab, setTab] = useState("tasks");
+  const [popup, setPopup] = useState(null); // {type:'up'|'down'|'achieve', ...}
+  const [flash, setFlash] = useState(null);
+  const [saveTime, setSaveTime] = useState(null);
+  const [saveError, setSaveError] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // forms
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newXP, setNewXP] = useState("10");
+  const [newPName, setNewPName] = useState("");
+  const [newPXP, setNewPXP] = useState("30");
+  const [achTaskId, setAchTaskId] = useState("");
+  const [achTarget, setAchTarget] = useState("10");
+  const [achReward, setAchReward] = useState("");
+  const [wishText, setWishText] = useState("");
+  const [proposalText, setProposalText] = useState("");
+  const [proposalXP, setProposalXP] = useState({}); // proposalId -> xp string
+  const [assignPick, setAssignPick] = useState({}); // wishId -> level
+  const [showBackup, setShowBackup] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [hidName, setHidName] = useState("");
+  const [hidXP, setHidXP] = useState("40");
+  const [seenIds, setSeenIds] = useState([]);
+  const sharedRef = useRef(null);
+
+  const persistSeen = (ids) => {
+    setSeenIds(ids);
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify(ids.slice(-300))); } catch (e) { /* fine */ }
+  };
+
+  // ---------- Storage (Firebase RTDB: REST-first with realtime upgrade) ----------
+  const roleRef = useRef(null);
+  const sdkLive = useRef(false); // becomes true once the realtime channel delivers data
+
+  const applyIncoming = (raw) => {
+    const next = normalizeShared(raw);
+    const prev = sharedRef.current;
+    if (prev && roleRef.current === "player") {
+      const prevHidden = prev.log.filter((l) => l.hidden).length;
+      const newHidden = next.log.filter((l) => l.hidden).length;
+      if (newHidden > prevHidden) setPopup({ type: "hidden" });
+    }
+    sharedRef.current = next;
+    setShared(next);
+    setBooted(true);
+    setSaveError(false);
+  };
+
+  const restLoad = async () => {
+    const r = await fetch(REST_URL);
+    if (!r.ok) throw new Error("rest " + r.status);
+    return r.json();
+  };
+
+  const loadShared = async () => {
+    setSyncing(true);
+    try {
+      applyIncoming(await restLoad());
+    } catch (e) { /* keep whatever we have */ }
+    setSyncing(false);
+  };
+
+  const saveShared = async (next) => {
+    sharedRef.current = next;
+    setShared(next);
+    const stamp = () => {
+      setSaveError(false);
+      setSaveTime(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    };
+    try {
+      if (window.db && sdkLive.current) {
+        await window.db.ref(GAME_PATH).set(next);
+      } else {
+        const r = await fetch(REST_URL, { method: "PUT", body: JSON.stringify(next) });
+        if (!r.ok) throw new Error("rest put " + r.status);
+      }
+      stamp();
+    } catch (e) {
+      // one more try with the other channel
+      try {
+        const r = await fetch(REST_URL, { method: "PUT", body: JSON.stringify(next) });
+        if (!r.ok) throw new Error("rest put " + r.status);
+        stamp();
+      } catch (e2) {
+        setSaveError(true);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // restore this device's role + seen notifications
+    try {
+      const r = localStorage.getItem(ROLE_KEY);
+      if (r) { setRole(r); roleRef.current = r; }
+    } catch (e) { /* fine */ }
+    try {
+      const seen = localStorage.getItem(SEEN_KEY);
+      if (seen) setSeenIds(JSON.parse(seen));
+    } catch (e) { /* fine */ }
+
+    // 1) boot instantly over REST (we know this channel works)
+    restLoad()
+      .then((data) => { if (!sdkLive.current) applyIncoming(data); })
+      .catch(() => {
+        if (!sharedRef.current) {
+          sharedRef.current = { ...DEFAULT_SHARED };
+          setShared(sharedRef.current);
+          setBooted(true);
+          setSaveError(true);
+        }
+      });
+
+    // 2) try to upgrade to the realtime channel
+    let ref = null;
+    const onValue = (snap) => {
+      sdkLive.current = true;
+      applyIncoming(snap.val());
+    };
+    try {
+      if (window.db) {
+        ref = window.db.ref(GAME_PATH);
+        ref.on("value", onValue, () => { /* realtime denied; polling covers us */ });
+      }
+    } catch (e) { /* polling covers us */ }
+
+    // 3) fallback: if realtime never comes up, poll every 5s so both sides stay in sync
+    const iv = setInterval(() => {
+      if (!sdkLive.current) {
+        restLoad().then((data) => applyIncoming(data)).catch(() => {});
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(iv);
+      if (ref) ref.off("value", onValue);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persistRole = (r) => {
+    setRole(r);
+    roleRef.current = r;
+    try {
+      if (r) localStorage.setItem(ROLE_KEY, r);
+      else localStorage.removeItem(ROLE_KEY);
+    } catch (e) { /* fine */ }
+  };
+
+  // ---------- Derived ----------
+  const s = shared || DEFAULT_SHARED;
+  const level = levelFromXP(s.totalXP);
+  const curBase = LEVEL_THRESHOLDS[level - 1];
+  const nextGoal = level < MAX_LEVEL ? LEVEL_THRESHOLDS[level] : null;
+  const progress = nextGoal ? (s.totalXP - curBase) / (nextGoal - curBase) : 1;
+  const segments = 12;
+  const filled = Math.round(progress * segments);
+  const pendingRequests = s.requests.filter((r) => r.status === "pending");
+  const pendingProposals = s.proposals.filter((p) => p.status === "pending");
+  const pendingWishes = s.wishes.filter((w) => w.status === "pending");
+  const pendingCoupons = (s.coupons || []).filter((c) => c.status === "pending");
+  const inboxCount = pendingRequests.length + pendingProposals.length + pendingWishes.length + pendingCoupons.length;
+
+  // player notifications: request results + hidden quest clears
+  const playerNotifs = [
+    ...s.requests
+      .filter((r) => r.status !== "pending")
+      .map((r) => ({
+        id: "req-" + r.id,
+        ts: r.ts || 0,
+        time: r.time,
+        icon: r.status === "approved" ? "✅" : "🚫",
+        text:
+          r.status === "approved"
+            ? `Approved: ${r.name} (+${r.xp} XP)`
+            : `Declined: ${r.name}`,
+      })),
+    ...s.log
+      .filter((l) => l.hidden)
+      .map((l) => ({
+        id: "hid-" + l.id,
+        ts: l.ts || 0,
+        time: l.time,
+        icon: "✨",
+        text: `You cleared a hidden quest! (+${l.xp} XP)`,
+      })),
+    ...(s.coupons || [])
+      .filter((c) => c.status === "fulfilled")
+      .map((c) => ({
+        id: "cpn-" + c.id,
+        ts: c.fulfilledTs || c.ts || 0,
+        time: c.fulfilledTime || c.time,
+        icon: "🎉",
+        text: `Coupon fulfilled: ${c.reward}`,
+      })),
+  ].sort((a, b) => b.ts - a.ts);
+  const unseenCount = playerNotifs.filter((n) => !seenIds.includes(n.id)).length;
+
+  // player: opening the inbox marks everything as seen
+  useEffect(() => {
+    if (booted && role === "player" && tab === "inbox") {
+      const allIds = playerNotifs.map((n) => n.id);
+      if (allIds.some((id) => !seenIds.includes(id))) {
+        persistSeen(Array.from(new Set([...seenIds, ...allIds])));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, booted, role, playerNotifs.length]);
+
+  // ---------- Player actions ----------
+  const [applyTarget, setApplyTarget] = useState(null); // task being applied for
+  const [applyReason, setApplyReason] = useState("");
+
+  const openApply = (task) => {
+    setApplyReason("");
+    setApplyTarget(task);
+  };
+
+  const confirmApply = () => {
+    if (!applyTarget) return;
+    const req = {
+      id: uid(),
+      taskId: applyTarget.id,
+      name: applyTarget.name,
+      xp: applyTarget.xp,
+      reason: applyReason.trim() || null,
+      time: now(),
+      ts: Date.now(),
+      status: "pending",
+    };
+    saveShared({ ...s, requests: [req, ...s.requests].slice(0, 100) });
+    setFlash("apply-" + applyTarget.id);
+    setTimeout(() => setFlash(null), 900);
+    setApplyTarget(null);
+    setApplyReason("");
+  };
+
+  const submitWish = () => {
+    if (!wishText.trim()) return;
+    const wish = { id: uid(), text: wishText.trim(), time: now(), ts: Date.now(), status: "pending", assignedTo: null };
+    saveShared({ ...s, wishes: [wish, ...s.wishes].slice(0, 100) });
+    setWishText("");
+  };
+
+  const submitProposal = () => {
+    if (!proposalText.trim()) return;
+    const p = { id: uid(), name: proposalText.trim(), time: now(), ts: Date.now(), status: "pending" };
+    saveShared({ ...s, proposals: [p, ...s.proposals].slice(0, 100) });
+    setProposalText("");
+  };
+
+  const withdrawRequest = (id) =>
+    saveShared({ ...s, requests: s.requests.filter((r) => !(r.id === id && r.status === "pending")) });
+
+  const withdrawProposal = (id) =>
+    saveShared({ ...s, proposals: s.proposals.filter((p) => !(p.id === id && p.status === "pending")) });
+
+  // player: claiming a trophy = booking a coupon
+  const [claimTarget, setClaimTarget] = useState(null); // achievement being claimed
+  const [claimDate, setClaimDate] = useState("");
+
+  const openClaim = (a) => {
+    setClaimDate("");
+    setClaimTarget(a);
+  };
+
+  const confirmClaim = () => {
+    if (!claimTarget || !claimDate) return;
+    const task = s.tasks.find((t) => t.id === claimTarget.taskId);
+    const coupon = {
+      id: uid(),
+      achievementId: claimTarget.id,
+      questName: `${task ? task.name : "Trophy"} ×${claimTarget.target}`,
+      reward: claimTarget.reward,
+      useDate: claimDate,
+      time: now(),
+      ts: Date.now(),
+      status: "pending",
+    };
+    saveShared({
+      ...s,
+      coupons: [coupon, ...(s.coupons || [])].slice(0, 100),
+      achievements: s.achievements.map((a) =>
+        a.id === claimTarget.id ? { ...a, timesEarned: (a.timesEarned || 0) + 1 } : a
+      ),
+    });
+    setClaimTarget(null);
+    setClaimDate("");
+  };
+
+  const fulfillCoupon = (c) =>
+    saveShared({
+      ...s,
+      coupons: (s.coupons || []).map((x) =>
+        x.id === c.id ? { ...x, status: "fulfilled", fulfilledTs: Date.now(), fulfilledTime: now() } : x
+      ),
+    });
+
+  // ---------- Admin actions ----------
+  const grantXP = (base, name, xp, taskId, hidden = false) => {
+    // returns next-state pieces + fires popup
+    const before = levelFromXP(base.totalXP);
+    const newTotal = base.totalXP + xp;
+    const after = levelFromXP(newTotal);
+    const newCounts = taskId
+      ? { ...base.taskCounts, [taskId]: (base.taskCounts[taskId] || 0) + 1 }
+      : base.taskCounts;
+    const entry = { id: uid(), taskId: taskId || null, name, xp, time: now(), ts: Date.now(), hidden };
+    const newCount = taskId ? newCounts[taskId] : 0;
+    const hitAch = taskId
+      ? base.achievements.find(
+          (a) => a.taskId === taskId && newCount - (a.timesEarned || 0) * a.target === a.target
+        )
+      : null;
+    if (after > before) {
+      setPopup({ type: "up", level: after, reward: base.rewards[after] || "Reward TBD — stay tuned 👀" });
+    } else if (hitAch) {
+      setPopup({ type: "achieve", name: `${name} ×${hitAch.target}`, reward: hitAch.reward });
+    }
+    return { totalXP: newTotal, taskCounts: newCounts, log: [entry, ...base.log].slice(0, 200) };
+  };
+
+  const addHiddenTask = () => {
+    const xp = parseInt(hidXP, 10);
+    if (!hidName.trim() || !xp || xp <= 0) return;
+    saveShared({ ...s, hiddenTasks: [...(s.hiddenTasks || []), { id: uid(), name: hidName.trim(), xp }] });
+    setHidName("");
+    setHidXP("40");
+  };
+
+  const deleteHiddenTask = (id) =>
+    saveShared({ ...s, hiddenTasks: (s.hiddenTasks || []).filter((t) => t.id !== id) });
+
+  const completeHiddenTask = (t) => {
+    const granted = grantXP(s, t.name, t.xp, null, true);
+    saveShared({ ...s, ...granted });
+    setFlash("hid-" + t.id);
+    setTimeout(() => setFlash(null), 700);
+  };
+
+  const approveRequest = (req) => {
+    const granted = grantXP(s, req.name, req.xp, req.taskId);
+    saveShared({
+      ...s,
+      ...granted,
+      requests: s.requests.map((r) => (r.id === req.id ? { ...r, status: "approved" } : r)),
+    });
+  };
+
+  const declineRequest = (req) =>
+    saveShared({ ...s, requests: s.requests.map((r) => (r.id === req.id ? { ...r, status: "declined" } : r)) });
+
+  const completeTaskDirect = (task) => {
+    const granted = grantXP(s, task.name, task.xp, task.id);
+    saveShared({ ...s, ...granted });
+    setFlash(task.id);
+    setTimeout(() => setFlash(null), 700);
+  };
+
+  const applyPenalty = (p) => {
+    const before = levelFromXP(s.totalXP);
+    const newTotal = Math.max(0, s.totalXP - p.xp);
+    const after = levelFromXP(newTotal);
+    const entry = { id: uid(), taskId: null, name: p.name, xp: -(s.totalXP - newTotal), time: now(), ts: Date.now() };
+    saveShared({ ...s, totalXP: newTotal, log: [entry, ...s.log].slice(0, 200) });
+    setFlash("pen-" + p.id);
+    setTimeout(() => setFlash(null), 700);
+    if (after < before) setPopup({ type: "down", level: after });
+  };
+
+  const deleteLog = (entry) => {
+    const next = {
+      ...s,
+      totalXP: Math.max(0, s.totalXP - entry.xp),
+      taskCounts:
+        entry.taskId && entry.xp > 0
+          ? { ...s.taskCounts, [entry.taskId]: Math.max(0, (s.taskCounts[entry.taskId] || 0) - 1) }
+          : s.taskCounts,
+      log: s.log.filter((l) => l.id !== entry.id),
+    };
+    saveShared(next);
+  };
+
+  const undoLast = () => {
+    if (s.log.length > 0) deleteLog(s.log[0]);
+  };
+
+  const addTask = () => {
+    const xp = parseInt(newXP, 10);
+    if (!newName.trim() || !xp || xp <= 0) return;
+    saveShared({ ...s, tasks: [...s.tasks, { id: uid(), name: newName.trim(), xp }] });
+    setNewName("");
+    setNewXP("10");
+  };
+
+  const deleteTask = (id) => saveShared({ ...s, tasks: s.tasks.filter((t) => t.id !== id) });
+
+  const addPenalty = () => {
+    const xp = parseInt(newPXP, 10);
+    if (!newPName.trim() || !xp || xp <= 0) return;
+    saveShared({ ...s, penalties: [...s.penalties, { id: uid(), name: newPName.trim(), xp }] });
+    setNewPName("");
+    setNewPXP("30");
+  };
+
+  const deletePenalty = (id) => saveShared({ ...s, penalties: s.penalties.filter((p) => p.id !== id) });
+
+  const setReward = (lv, text) => saveShared({ ...s, rewards: { ...s.rewards, [lv]: text } });
+
+  const claimReward = (lv) => saveShared({ ...s, claimed: { ...s.claimed, [lv]: true } });
+
+  const addAchievement = () => {
+    const target = parseInt(achTarget, 10);
+    if (!achTaskId || !target || target <= 0 || !achReward.trim()) return;
+    saveShared({
+      ...s,
+      achievements: [...s.achievements, { id: uid(), taskId: achTaskId, target, reward: achReward.trim(), claimed: false }],
+    });
+    setAchTaskId("");
+    setAchTarget("10");
+    setAchReward("");
+  };
+
+  const deleteAchievement = (id) =>
+    saveShared({ ...s, achievements: s.achievements.filter((a) => a.id !== id) });
+
+  const approveWish = (wish) => {
+    const lv = parseInt(assignPick[wish.id], 10);
+    if (!lv) return;
+    saveShared({
+      ...s,
+      rewards: { ...s.rewards, [lv]: wish.text },
+      wishes: s.wishes.map((w) => (w.id === wish.id ? { ...w, status: "approved", assignedTo: `LV${lv}` } : w)),
+    });
+  };
+
+  const declineWish = (wish) =>
+    saveShared({ ...s, wishes: s.wishes.map((w) => (w.id === wish.id ? { ...w, status: "declined" } : w)) });
+
+  const deleteWish = (id) => saveShared({ ...s, wishes: s.wishes.filter((w) => w.id !== id) });
+
+  const approveProposal = (p) => {
+    const xp = parseInt(proposalXP[p.id], 10);
+    if (!xp || xp <= 0) return;
+    saveShared({
+      ...s,
+      tasks: [...s.tasks, { id: uid(), name: p.name, xp }],
+      proposals: s.proposals.map((x) => (x.id === p.id ? { ...x, status: "approved" } : x)),
+    });
+  };
+
+  const declineProposal = (p) =>
+    saveShared({ ...s, proposals: s.proposals.map((x) => (x.id === p.id ? { ...x, status: "declined" } : x)) });
+
+  const deleteProposal = (id) => saveShared({ ...s, proposals: s.proposals.filter((p) => p.id !== id) });
+
+  const resetAll = () => {
+    if (window.confirm("Reset everything? XP, logs, requests and wishes will all go back to zero!")) {
+      saveShared({ ...DEFAULT_SHARED, pin: s.pin });
+    }
+  };
+
+  // ---------- UI bits ----------
+  const panelStyle = {
+    background: C.panel,
+    border: `4px solid ${C.ink}`,
+    borderRadius: 12,
+    boxShadow: `6px 6px 0 rgba(0,0,0,0.35)`,
+  };
+
+  const btn = (bg, color = "#fff", extra = {}) => ({
+    background: bg, color, border: `3px solid ${C.ink}`, borderRadius: 8,
+    padding: "8px 14px", fontWeight: 900, fontSize: 13, cursor: "pointer",
+    fontFamily: bodyFont, boxShadow: "2px 2px 0 rgba(0,0,0,.3)", ...extra,
+  });
+
+  const inputStyle = {
+    padding: "10px 12px", fontSize: 14, fontWeight: 500,
+    border: `3px solid ${C.ink}`, borderRadius: 8, fontFamily: bodyFont,
+  };
+
+  const StatusTag = ({ status }) =>
+    status === "pending" ? (
+      <span style={{ fontSize: 10, fontFamily: pixelFont, color: C.gold, whiteSpace: "nowrap" }}>PENDING</span>
+    ) : status === "approved" ? (
+      <span style={{ fontSize: 13 }}>✅</span>
+    ) : (
+      <span style={{ fontSize: 13 }}>🚫</span>
+    );
+
+  const fonts = (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;500;700;900&display=swap');
+      @keyframes pop { 0%{transform:scale(.5);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+      @keyframes floatUp { 0%{transform:translateY(0);opacity:1} 100%{transform:translateY(-28px);opacity:0} }
+      @keyframes blink { 50%{opacity:.3} }
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+      input:focus, button:focus-visible, select:focus { outline: 3px solid ${C.gold}; outline-offset: 2px; }
+    `}</style>
+  );
+
+  const shell = (children) => (
+    <div
+      style={{
+        minHeight: "100vh", background: C.bg,
+        backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px)",
+        backgroundSize: "22px 22px",
+        fontFamily: bodyFont, color: C.ink, padding: "20px 12px 48px",
+      }}
+    >
+      {fonts}
+      <div style={{ maxWidth: 520, margin: "0 auto" }}>{children}</div>
+    </div>
+  );
+
+  // ---------- Boot / role select ----------
+  if (!booted || !shared) {
+    return shell(
+      <div style={{ textAlign: "center", paddingTop: 120 }}>
+        <div style={{ color: C.gold, fontFamily: pixelFont, fontSize: 14 }}>LOADING...</div>
+      </div>
+    );
+  }
+
+  if (!role) {
+    return shell(
+      <div style={{ paddingTop: 40 }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontFamily: pixelFont, color: C.gold, fontSize: 10, letterSpacing: 2, marginBottom: 10 }}>
+            ★ EARN IT ★
+          </div>
+          <h1 style={{ margin: 0, color: "#fff", fontSize: 24, fontWeight: 900, fontFamily: pixelFont, textShadow: "3px 3px 0 rgba(0,0,0,.4)", lineHeight: 1.4 }}>
+            BROWNIE<br />POINTS
+          </h1>
+        </div>
+        <div style={{ ...panelStyle, padding: 20 }}>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 14, textAlign: "center" }}>Who's playing?</div>
+          <button
+            onClick={() => persistRole("player")}
+            style={{ ...btn(C.pink), width: "100%", padding: "14px 0", fontSize: 16, marginBottom: 10 }}
+          >
+            🎮 I'm the Player
+          </button>
+          <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, textAlign: "center", marginBottom: 18 }}>
+            Do quests, earn XP, level up, unlock mystery rewards
+          </div>
+          <div style={{ borderTop: `3px dashed ${C.dim}`, paddingTop: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textAlign: "center" }}>
+              👑 Game Master — enter PIN
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <input
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value.replace(/[^0-9]/g, "").slice(0, 4)); setPinError(false); }}
+                inputMode="numeric"
+                placeholder="PIN"
+                style={{ ...inputStyle, width: 90, textAlign: "center", fontWeight: 900, letterSpacing: 4 }}
+              />
+              <button
+                onClick={() => {
+                  if (pinInput === ADMIN_PIN) {
+                    persistRole("admin");
+                  } else {
+                    setPinError(true);
+                  }
+                  setPinInput("");
+                }}
+                style={btn(C.ink)}
+              >
+                Enter
+              </button>
+            </div>
+            {pinError && (
+              <div style={{ textAlign: "center", color: C.red, fontWeight: 700, fontSize: 12, marginTop: 8 }}>
+                Wrong PIN, try again
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isAdmin = role === "admin";
+
+  // tab sets per role
+  const tabs = isAdmin
+    ? [["tasks", "Quests"], ["ach", "Trophies"], ["rewards", "Rewards"], ["inbox", inboxCount > 0 ? `Inbox·${inboxCount}` : "Inbox"], ["log", "Log"]]
+    : [["tasks", "Quests"], ["ach", "Trophies"], ["rewards", "Rewards"], ["wishes", "Wishes"], ["inbox", unseenCount > 0 ? `Inbox·${unseenCount}` : "Inbox"], ["log", "Log"]];
+  const activeTab = tabs.some(([id]) => id === tab) ? tab : "tasks";
+
+  return shell(
+    <>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 18 }}>
+        <div style={{ fontFamily: pixelFont, color: C.gold, fontSize: 10, letterSpacing: 2, marginBottom: 10 }}>
+          {isAdmin ? "★ GAME MASTER ★" : "★ EARN IT ★"}
+        </div>
+        <h1 style={{ margin: 0, color: "#fff", fontSize: 24, fontWeight: 900, fontFamily: pixelFont, textShadow: "3px 3px 0 rgba(0,0,0,.4)", lineHeight: 1.4 }}>
+          BROWNIE<br />POINTS
+        </h1>
+      </div>
+
+      {/* Status HUD */}
+      <div style={{ ...panelStyle, padding: 18, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 74, height: 74, flexShrink: 0,
+              background: C.pink, border: `4px solid ${C.ink}`, borderRadius: 12,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff",
+            }}
+          >
+            <div style={{ fontFamily: pixelFont, fontSize: 9 }}>LV</div>
+            <div style={{ fontFamily: pixelFont, fontSize: 24, marginTop: 4 }}>{level}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+              <span style={{ fontWeight: 900, fontSize: 15 }}>
+                {level >= MAX_LEVEL ? "Max level 👑" : `To LV${level + 1}`}
+              </span>
+              <span style={{ fontFamily: pixelFont, fontSize: 10, color: C.ink }}>
+                {nextGoal ? `${s.totalXP}/${nextGoal}` : `${s.totalXP} XP`}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 3, background: C.ink, padding: 4, borderRadius: 8 }}>
+              {Array.from({ length: segments }).map((_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: 1, height: 16, borderRadius: 3,
+                    background: i < filled ? C.gold : "rgba(255,255,255,0.12)",
+                    boxShadow: i < filled ? "inset 0 -4px 0 rgba(0,0,0,.25)" : "none",
+                    transition: "background .3s",
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: C.dim, marginTop: 6, fontWeight: 500 }}>
+              Total {s.totalXP} XP · {s.log.length} entries logged
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button
+            onClick={loadShared}
+            style={{
+              flex: 1, background: "transparent", border: `2px dashed ${C.dim}`, borderRadius: 8,
+              padding: "7px 10px", fontWeight: 700, fontSize: 12, color: C.ink, cursor: "pointer", fontFamily: bodyFont,
+            }}
+          >
+            {syncing ? "Syncing…" : "● Live · tap to refresh"}
+          </button>
+          {isAdmin && s.log.length > 0 && (
+            <button
+              onClick={undoLast}
+              style={{
+                flex: 2, background: "transparent", border: `2px dashed ${C.dim}`, borderRadius: 8,
+                padding: "7px 10px", fontWeight: 700, fontSize: 12, color: C.ink, cursor: "pointer", fontFamily: bodyFont,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}
+            >
+              ↩ Undo: {s.log[0].name} ({s.log[0].xp > 0 ? "+" : ""}{s.log[0].xp})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, background: "rgba(0,0,0,.25)", padding: 6, borderRadius: 14 }}>
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{
+              flex: 1, padding: "10px 1px", fontFamily: bodyFont, fontWeight: 900, fontSize: 11,
+              color: activeTab === id ? C.panel : C.dim,
+              background: activeTab === id ? C.pink : "transparent",
+              border: `3px solid ${activeTab === id ? C.ink : "transparent"}`,
+              borderRadius: 10, cursor: "pointer", transition: "all .15s",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ======== QUESTS ======== */}
+      {activeTab === "tasks" && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            {isAdmin
+              ? 'Approve his requests in the Inbox, or tap "Done" to grant XP directly ✦'
+              : 'Did one of these? Tap "Apply" — she reviews and grants the XP ✦'}
+          </div>
+          {s.tasks.length === 0 && (
+            <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
+              No quests yet!
+            </div>
+          )}
+          {s.tasks.map((t) => {
+            const hasPending = pendingRequests.some((r) => r.taskId === t.id);
+            return (
+              <div
+                key={t.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 12px", marginBottom: 8,
+                  background: flash === t.id || flash === "apply-" + t.id ? "#eaffe9" : "#fff",
+                  border: `3px solid ${C.ink}`, borderRadius: 10, position: "relative",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{t.name}</div>
+                  {t.note && (
+                    <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginTop: 2 }}>({t.note})</div>
+                  )}
+                </div>
+                <div style={{ fontFamily: pixelFont, fontSize: 10, color: C.pink, whiteSpace: "nowrap" }}>
+                  +{t.xp}XP
+                </div>
+                {isAdmin ? (
+                  <>
+                    <button onClick={() => completeTaskDirect(t)} style={btn(C.mint, C.ink, { padding: "6px 12px" })}>
+                      Done
+                    </button>
+                    <button
+                      onClick={() => deleteTask(t.id)}
+                      aria-label={`Delete quest ${t.name}`}
+                      style={{ background: "transparent", border: "none", color: C.dim, fontSize: 16, cursor: "pointer", padding: 2 }}
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : hasPending ? (
+                  <span style={{ fontSize: 10, fontFamily: pixelFont, color: C.gold }}>SENT ✦</span>
+                ) : (
+                  <button onClick={() => openApply(t)} style={btn(C.pink, "#fff", { padding: "6px 12px" })}>
+                    Apply
+                  </button>
+                )}
+                {flash === "apply-" + t.id && (
+                  <div
+                    style={{
+                      position: "absolute", right: 80, top: -6,
+                      fontFamily: pixelFont, fontSize: 9, color: C.mint,
+                      animation: "floatUp .9s ease-out forwards", textShadow: "1px 1px 0 rgba(0,0,0,.3)",
+                    }}
+                  >
+                    SENT!
+                  </div>
+                )}
+                {flash === t.id && (
+                  <div
+                    style={{
+                      position: "absolute", right: 90, top: -6,
+                      fontFamily: pixelFont, fontSize: 10, color: C.mint,
+                      animation: "floatUp .7s ease-out forwards", textShadow: "1px 1px 0 rgba(0,0,0,.3)",
+                    }}
+                  >
+                    +{t.xp}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Player: my recent requests + suggest a quest */}
+          {!isAdmin && (
+            <>
+              {s.requests.length > 0 && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+                  <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>My requests</div>
+                  {s.requests.slice(0, 8).map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", marginBottom: 6,
+                        background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 8,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13 }}>{r.name}</div>
+                        {r.reason && (
+                          <div style={{ fontSize: 11, color: C.ink, fontWeight: 500, fontStyle: "italic", marginTop: 2 }}>
+                            💬 "{r.reason}"
+                          </div>
+                        )}
+                        <div style={{ fontSize: 10, color: C.dim }}>{r.time}</div>
+                      </div>
+                      <StatusTag status={r.status} />
+                      {r.status === "pending" && (
+                        <button
+                          onClick={() => withdrawRequest(r.id)}
+                          style={{
+                            background: "transparent", border: `2px solid ${C.dim}`, color: C.dim,
+                            borderRadius: 6, padding: "3px 8px", fontWeight: 700, fontSize: 11,
+                            cursor: "pointer", fontFamily: bodyFont, whiteSpace: "nowrap",
+                          }}
+                        >
+                          ↩ Undo
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4 }}>Suggest a quest</div>
+                <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 8 }}>
+                  Pitch something you do that should earn XP — she sets how much it's worth
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={proposalText}
+                    onChange={(e) => setProposalText(e.target.value)}
+                    placeholder="e.g. Walk you home"
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                  />
+                  <button onClick={submitProposal} style={btn(C.pink)}>
+                    Pitch
+                  </button>
+                </div>
+                {s.proposals.slice(0, 5).map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", marginTop: 6,
+                      background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 8,
+                    }}
+                  >
+                    <div style={{ flex: 1, fontWeight: 700, fontSize: 13 }}>{p.name}</div>
+                    <StatusTag status={p.status} />
+                    {p.status === "pending" && (
+                      <button
+                        onClick={() => withdrawProposal(p.id)}
+                        style={{
+                          background: "transparent", border: `2px solid ${C.dim}`, color: C.dim,
+                          borderRadius: 6, padding: "3px 8px", fontWeight: 700, fontSize: 11,
+                          cursor: "pointer", fontFamily: bodyFont, whiteSpace: "nowrap",
+                        }}
+                      >
+                        ↩ Undo
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Admin: add quest + penalties */}
+          {isAdmin && (
+            <>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: `3px dashed ${C.dim}` }}>
+                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>Add a quest</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Quest name (e.g. pick me up)"
+                    style={{ ...inputStyle, flex: "1 1 180px" }}
+                  />
+                  <input
+                    value={newXP}
+                    onChange={(e) => setNewXP(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="XP"
+                    style={{ ...inputStyle, width: 70, textAlign: "center", fontWeight: 700 }}
+                  />
+                  <button onClick={addTask} style={btn(C.pink)}>Add</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18, paddingTop: 14, borderTop: `3px solid ${C.red}` }}>
+                <div style={{ fontWeight: 900, fontSize: 15, color: C.red, marginBottom: 4 }}>⚠ Penalties</div>
+                <div style={{ fontSize: 12, color: C.dim, fontWeight: 700, marginBottom: 10 }}>
+                  Tap "Log it" — XP is deducted and the level can drop
+                </div>
+                {s.penalties.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 8,
+                      background: flash === "pen-" + p.id ? "#ffe9ec" : "#fff",
+                      border: `3px solid ${C.red}`, borderRadius: 10, position: "relative",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{p.name}</div>
+                      {p.note && (
+                        <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginTop: 2 }}>({p.note})</div>
+                      )}
+                    </div>
+                    <div style={{ fontFamily: pixelFont, fontSize: 10, color: C.red, whiteSpace: "nowrap" }}>
+                      -{p.xp}XP
+                    </div>
+                    <button onClick={() => applyPenalty(p)} style={btn(C.red, "#fff", { padding: "6px 10px", whiteSpace: "nowrap" })}>
+                      Log it
+                    </button>
+                    <button
+                      onClick={() => deletePenalty(p.id)}
+                      aria-label={`Delete penalty ${p.name}`}
+                      style={{ background: "transparent", border: "none", color: C.dim, fontSize: 16, cursor: "pointer", padding: 2 }}
+                    >
+                      ✕
+                    </button>
+                    {flash === "pen-" + p.id && (
+                      <div
+                        style={{
+                          position: "absolute", right: 100, top: -6,
+                          fontFamily: pixelFont, fontSize: 10, color: C.red,
+                          animation: "floatUp .7s ease-out forwards", textShadow: "1px 1px 0 rgba(0,0,0,.3)",
+                        }}
+                      >
+                        -{p.xp}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                  <input
+                    value={newPName}
+                    onChange={(e) => setNewPName(e.target.value)}
+                    placeholder="Penalty (e.g. half-hearted replies)"
+                    style={{ ...inputStyle, flex: "1 1 180px", borderColor: C.red }}
+                  />
+                  <input
+                    value={newPXP}
+                    onChange={(e) => setNewPXP(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="XP"
+                    style={{ ...inputStyle, width: 70, textAlign: "center", fontWeight: 700, borderColor: C.red }}
+                  />
+                  <button onClick={addPenalty} style={btn("#fff", C.red, { borderColor: C.red })}>Add</button>
+                </div>
+              </div>
+
+              {/* Hidden quests (admin only) */}
+              <div style={{ marginTop: 18, paddingTop: 14, borderTop: `3px solid ${C.gold}` }}>
+                <div style={{ fontWeight: 900, fontSize: 15, marginBottom: 4 }}>✨ Hidden quests</div>
+                <div style={{ fontSize: 12, color: C.dim, fontWeight: 700, marginBottom: 10 }}>
+                  Only you can see these. Tap "Done" when he unknowingly clears one — he'll get a mystery notification 😏
+                </div>
+                {(s.hiddenTasks || []).map((t) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 8,
+                      background: flash === "hid-" + t.id ? "#fffbe8" : "#fff",
+                      border: `3px solid ${C.gold}`, borderRadius: 10, position: "relative",
+                    }}
+                  >
+                    <div style={{ flex: 1, fontWeight: 700, fontSize: 15 }}>{t.name}</div>
+                    <div style={{ fontFamily: pixelFont, fontSize: 10, color: C.gold, whiteSpace: "nowrap" }}>
+                      +{t.xp}XP
+                    </div>
+                    <button onClick={() => completeHiddenTask(t)} style={btn(C.gold, C.ink, { padding: "6px 12px" })}>
+                      Done
+                    </button>
+                    <button
+                      onClick={() => deleteHiddenTask(t.id)}
+                      aria-label={`Delete hidden quest ${t.name}`}
+                      style={{ background: "transparent", border: "none", color: C.dim, fontSize: 16, cursor: "pointer", padding: 2 }}
+                    >
+                      ✕
+                    </button>
+                    {flash === "hid-" + t.id && (
+                      <div
+                        style={{
+                          position: "absolute", right: 90, top: -6,
+                          fontFamily: pixelFont, fontSize: 10, color: C.gold,
+                          animation: "floatUp .7s ease-out forwards", textShadow: "1px 1px 0 rgba(0,0,0,.3)",
+                        }}
+                      >
+                        +{t.xp}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                  <input
+                    value={hidName}
+                    onChange={(e) => setHidName(e.target.value)}
+                    placeholder="Hidden quest (e.g. compliments my outfit)"
+                    style={{ ...inputStyle, flex: "1 1 180px", borderColor: C.gold }}
+                  />
+                  <input
+                    value={hidXP}
+                    onChange={(e) => setHidXP(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="XP"
+                    style={{ ...inputStyle, width: 70, textAlign: "center", fontWeight: 700, borderColor: C.gold }}
+                  />
+                  <button onClick={addHiddenTask} style={btn(C.gold, C.ink)}>Add</button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Player: penalty rules, read-only */}
+          {!isAdmin && s.penalties.length > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `3px solid ${C.red}` }}>
+              <div style={{ fontWeight: 900, fontSize: 14, color: C.red, marginBottom: 8 }}>⚠ DON'T</div>
+              {s.penalties.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", marginBottom: 6,
+                    background: "#fff", border: `2px solid ${C.red}`, borderRadius: 8,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</div>
+                    {p.note && (
+                      <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginTop: 2 }}>({p.note})</div>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: pixelFont, fontSize: 9, color: C.red }}>-{p.xp}XP</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Player: hidden quest teaser */}
+          {!isAdmin && (
+            <div
+              style={{
+                marginTop: 14, padding: "10px 12px", border: `3px dashed ${C.gold}`, borderRadius: 10,
+                background: "#fffbe8", textAlign: "center",
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 13 }}>✨ Hidden quests exist…</div>
+              <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginTop: 2 }}>
+                You'll be notified when you unknowingly clear one.
+                {s.log.filter((l) => l.hidden).length > 0 &&
+                  ` Cleared so far: ${s.log.filter((l) => l.hidden).length} 🏅`}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======== TROPHIES ======== */}
+      {activeTab === "ach" && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            Repeat the same quest enough times to unlock its own reward 🏆
+          </div>
+          {s.achievements.length === 0 && (
+            <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
+              No trophies yet!
+            </div>
+          )}
+          {s.achievements.map((a) => {
+            const task = s.tasks.find((t) => t.id === a.taskId);
+            const raw = s.taskCounts[a.taskId] || 0;
+            const eff = raw - (a.timesEarned || 0) * a.target;
+            const count = Math.min(Math.max(eff, 0), a.target);
+            const done = eff >= a.target;
+            const earned = a.timesEarned || 0;
+            return (
+              <div
+                key={a.id}
+                style={{
+                  padding: "12px 12px", marginBottom: 10,
+                  background: done ? "#fffbe8" : "#fff",
+                  border: `3px solid ${done ? C.gold : C.ink}`, borderRadius: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: 14 }}>
+                      {task ? task.name : "(quest deleted)"} ×{a.target}
+                      {earned > 0 && (
+                        <span style={{ fontSize: 11, color: C.gold, fontWeight: 900 }}> · earned ×{earned} 🏅</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginTop: 2 }}>
+                      Reward: {isAdmin ? a.reward : "??? 🎁"} · repeats after claiming
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: pixelFont, fontSize: 9, color: done ? C.gold : C.dim, whiteSpace: "nowrap" }}>
+                    {count}/{a.target}
+                  </div>
+                  {done ? (
+                    isAdmin ? (
+                      <span style={{ fontSize: 10, fontWeight: 900, color: C.gold, whiteSpace: "nowrap" }}>
+                        UNLOCKED · his move
+                      </span>
+                    ) : (
+                      <button onClick={() => openClaim(a)} style={btn(C.gold, C.ink, { padding: "6px 10px", whiteSpace: "nowrap" })}>
+                        Claim
+                      </button>
+                    )
+                  ) : (
+                    <span style={{ fontSize: 14 }}>🔒</span>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => deleteAchievement(a.id)}
+                      aria-label="Delete this trophy"
+                      style={{ background: "transparent", border: "none", color: C.dim, fontSize: 15, cursor: "pointer", padding: 2 }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 2, background: C.ink, padding: 3, borderRadius: 6, marginTop: 8 }}>
+                  {Array.from({ length: a.target }).map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1, height: 8, borderRadius: 2,
+                        background: i < count ? (done ? C.gold : C.pink) : "rgba(255,255,255,0.12)",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {isAdmin && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: `3px dashed ${C.dim}` }}>
+              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>Add a trophy</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    value={achTaskId}
+                    onChange={(e) => setAchTaskId(e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 0, background: "#fff", fontWeight: 500 }}
+                  >
+                    <option value="">Pick a quest…</option>
+                    {s.tasks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={achTarget}
+                    onChange={(e) => setAchTarget(e.target.value.replace(/[^0-9]/g, ""))}
+                    inputMode="numeric"
+                    placeholder="Times"
+                    style={{ ...inputStyle, width: 70, textAlign: "center", fontWeight: 700 }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={achReward}
+                    onChange={(e) => setAchReward(e.target.value)}
+                    placeholder="Reward when completed…"
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                  />
+                  <button onClick={addAchievement} style={btn(C.pink)}>Add</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======== REWARDS (admin only) ======== */}
+      {activeTab === "rewards" && isAdmin && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            Only you can see this tab — he sees "???" everywhere 🤫
+          </div>
+          {Array.from({ length: MAX_LEVEL - 1 }).map((_, i) => {
+            const lv = i + 2;
+            const unlocked = level >= lv;
+            const isClaimed = !!s.claimed[lv];
+            return (
+              <div
+                key={lv}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 8,
+                  background: unlocked ? "#fff" : "rgba(0,0,0,0.05)",
+                  border: `3px solid ${C.ink}`, borderRadius: 10, opacity: unlocked ? 1 : 0.75,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: pixelFont, fontSize: 9, flexShrink: 0,
+                    background: unlocked ? C.gold : C.dim, color: C.ink,
+                    border: `2px solid ${C.ink}`, borderRadius: 6, padding: "6px 6px",
+                  }}
+                >
+                  LV{lv}
+                </div>
+                <input
+                  key={`${lv}-${s.rewards[lv] || ""}`}
+                  defaultValue={s.rewards[lv] || ""}
+                  onBlur={(e) => { if (e.target.value !== (s.rewards[lv] || "")) setReward(lv, e.target.value); }}
+                  placeholder="Type a reward…"
+                  style={{
+                    flex: 1, minWidth: 0, padding: "8px 10px", fontSize: 14, fontWeight: 500,
+                    border: `2px solid ${C.dim}`, borderRadius: 8, fontFamily: bodyFont, background: "transparent",
+                  }}
+                />
+                {unlocked ? (
+                  isClaimed ? (
+                    <span style={{ fontSize: 12, fontWeight: 900, color: C.mint, whiteSpace: "nowrap" }}>Claimed ✓</span>
+                  ) : (
+                    <button onClick={() => claimReward(lv)} style={btn(C.gold, C.ink, { padding: "6px 10px", whiteSpace: "nowrap" })}>
+                      Claim
+                    </button>
+                  )
+                ) : (
+                  <span style={{ fontSize: 14 }}>🔒</span>
+                )}
+              </div>
+            );
+          })}
+
+          <div style={{ textAlign: "center", marginTop: 14, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => setShowBackup((v) => !v)} style={btn("transparent", C.ink, { border: `2px solid ${C.ink}`, boxShadow: "none", fontSize: 12 })}>
+              {showBackup ? "Hide backup" : "Backup / Restore"}
+            </button>
+            <button onClick={resetAll} style={btn("transparent", C.dim, { border: `2px solid ${C.dim}`, boxShadow: "none", fontSize: 12 })}>
+              Reset everything
+            </button>
+          </div>
+          {showBackup && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.dim, marginBottom: 6 }}>
+                ① Backup: select all the text below and save it somewhere safe
+              </div>
+              <textarea
+                readOnly
+                value={JSON.stringify(shared)}
+                onFocus={(e) => e.target.select()}
+                rows={4}
+                style={{ width: "100%", boxSizing: "border-box", padding: 8, fontSize: 11, border: `2px solid ${C.ink}`, borderRadius: 8, fontFamily: "monospace" }}
+              />
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.dim, margin: "10px 0 6px" }}>
+                ② Restore: paste a saved backup here, then tap the button
+              </div>
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder="Paste backup text…"
+                rows={3}
+                style={{ width: "100%", boxSizing: "border-box", padding: 8, fontSize: 11, border: `2px solid ${C.ink}`, borderRadius: 8, fontFamily: "monospace" }}
+              />
+              <button
+                onClick={() => {
+                  try {
+                    const data = JSON.parse(importText);
+                    if (typeof data.totalXP !== "number" || !Array.isArray(data.tasks)) throw new Error();
+                    saveShared({ ...DEFAULT_SHARED, ...data });
+                    setImportText("");
+                    setShowBackup(false);
+                  } catch (e) {
+                    window.alert("That doesn't look like a valid backup — make sure you copied all of it.");
+                  }
+                }}
+                style={{ ...btn(C.mint, C.ink), marginTop: 8 }}
+              >
+                Restore from backup
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======== WISHES (player) ======== */}
+      {activeTab === "wishes" && !isAdmin && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 4 }}>
+            Want a specific reward? Pitch it here 💬
+          </div>
+          <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginBottom: 12 }}>
+            If she approves it, it secretly becomes one of the level rewards… somewhere 😏
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <input
+              value={wishText}
+              onChange={(e) => setWishText(e.target.value)}
+              placeholder="I want… (e.g. you cook for me once)"
+              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+            />
+            <button onClick={submitWish} style={btn(C.pink)}>Wish</button>
+          </div>
+          {s.wishes.length === 0 && (
+            <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
+              No wishes yet. Dream big 💭
+            </div>
+          )}
+          {s.wishes.map((w) => (
+            <div
+              key={w.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 8,
+                background: w.status === "approved" ? "#eafff2" : w.status === "declined" ? "#f3f3f3" : "#fff",
+                border: `3px solid ${w.status === "approved" ? C.mint : w.status === "declined" ? C.dim : C.ink}`,
+                borderRadius: 10, opacity: w.status === "declined" ? 0.7 : 1,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, textDecoration: w.status === "declined" ? "line-through" : "none" }}>
+                  {w.text}
+                </div>
+                <div style={{ fontSize: 11, color: C.dim }}>
+                  {w.time}
+                  {w.status === "approved" && " · approved, hidden in a level 😏"}
+                  {w.status === "declined" && " · declined"}
+                </div>
+              </div>
+              <StatusTag status={w.status} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ======== REWARDS (player: coupon wallet) ======== */}
+      {activeTab === "rewards" && !isAdmin && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            Your claimed coupons live here 🎟 The reward stays a mystery until she fulfills it
+          </div>
+          {(s.coupons || []).length === 0 && (
+            <div style={{ textAlign: "center", padding: 24, color: C.dim, fontWeight: 500 }}>
+              No coupons yet — fill a trophy bar and hit Claim! 🏆
+            </div>
+          )}
+          {(s.coupons || []).map((c) => (
+            <div
+              key={c.id}
+              style={{
+                padding: "12px 12px", marginBottom: 8,
+                background: c.status === "fulfilled" ? "#eafff2" : "#fffbe8",
+                border: `3px solid ${c.status === "fulfilled" ? C.mint : C.gold}`,
+                borderRadius: 10,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20 }}>🎟</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 900, fontSize: 14 }}>
+                    {c.status === "fulfilled" ? c.reward : "Mystery reward 🎁"}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.dim, fontWeight: 500 }}>
+                    From: {c.questName} · Use on: {c.useDate}
+                  </div>
+                </div>
+                {c.status === "fulfilled" ? (
+                  <span style={{ fontSize: 11, fontWeight: 900, color: C.mint, whiteSpace: "nowrap" }}>Fulfilled 🎉</span>
+                ) : (
+                  <span style={{ fontFamily: pixelFont, fontSize: 8, color: C.gold, whiteSpace: "nowrap" }}>BOOKED ✦</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ======== INBOX (player) ======== */}
+      {activeTab === "inbox" && !isAdmin && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            Verdicts on your requests & hidden quest alerts land here 📬 (tap Sync up top for new stuff)
+          </div>
+          {playerNotifs.length === 0 && (
+            <div style={{ textAlign: "center", padding: 24, color: C.dim, fontWeight: 500 }}>
+              Nothing yet — go apply for some quests! ⚔️
+            </div>
+          )}
+          {playerNotifs.map((n) => {
+            const isNew = !seenIds.includes(n.id);
+            return (
+              <div
+                key={n.id}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", marginBottom: 8,
+                  background: n.icon === "✨" ? "#fffbe8" : "#fff",
+                  border: `3px solid ${n.icon === "✨" ? C.gold : C.ink}`,
+                  borderRadius: 10,
+                }}
+              >
+                <span style={{ fontSize: 18 }}>{n.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{n.text}</div>
+                  <div style={{ fontSize: 11, color: C.dim }}>{n.time}</div>
+                </div>
+                {isNew && (
+                  <span style={{ fontFamily: pixelFont, fontSize: 8, color: C.pink, whiteSpace: "nowrap" }}>NEW!</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ======== INBOX (admin) ======== */}
+      {activeTab === "inbox" && isAdmin && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            Everything he sent you lands here 📥 (tap Sync up top for new stuff)
+          </div>
+
+          {/* Coupons to fulfill */}
+          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>🎟 Coupons to fulfill</div>
+          {pendingCoupons.length === 0 && (
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 12 }}>Nothing booked.</div>
+          )}
+          {pendingCoupons.map((c) => (
+            <div
+              key={c.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 8,
+                background: "#fffbe8", border: `3px solid ${C.gold}`, borderRadius: 10, flexWrap: "wrap",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <div style={{ fontWeight: 900, fontSize: 14 }}>{c.reward}</div>
+                <div style={{ fontSize: 11, color: C.dim }}>
+                  From: {c.questName} · He wants it on: <b>{c.useDate}</b>
+                </div>
+              </div>
+              <button onClick={() => fulfillCoupon(c)} style={btn(C.mint, C.ink, { padding: "6px 12px" })}>
+                Fulfilled ✓
+              </button>
+            </div>
+          ))}
+          {(s.coupons || []).filter((c) => c.status === "fulfilled").length > 0 && (
+            <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginBottom: 4 }}>
+              Completed: {(s.coupons || []).filter((c) => c.status === "fulfilled").length} coupon(s) fulfilled ✓
+            </div>
+          )}
+
+          {/* Quest requests */}
+          <div style={{ fontWeight: 900, fontSize: 14, margin: "16px 0 8px", paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+            Quest requests
+          </div>
+          {pendingRequests.length === 0 && (
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 12 }}>Nothing pending.</div>
+          )}
+          {pendingRequests.map((r) => (
+            <div
+              key={r.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 8,
+                background: "#fff", border: `3px solid ${C.ink}`, borderRadius: 10, flexWrap: "wrap",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{r.name}</div>
+                {r.reason && (
+                  <div style={{ fontSize: 12, color: C.ink, fontWeight: 500, fontStyle: "italic", marginTop: 2 }}>
+                    💬 "{r.reason}"
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: C.dim }}>{r.time} · +{r.xp} XP</div>
+              </div>
+              <button onClick={() => approveRequest(r)} style={btn(C.mint, C.ink, { padding: "6px 12px" })}>
+                Done ✓
+              </button>
+              <button onClick={() => declineRequest(r)} style={btn("#fff", C.red, { borderColor: C.red, padding: "6px 10px" })}>
+                Nope
+              </button>
+            </div>
+          ))}
+
+          {/* Quest proposals */}
+          <div style={{ fontWeight: 900, fontSize: 14, margin: "16px 0 8px", paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+            Quest ideas from him
+          </div>
+          {pendingProposals.length === 0 && (
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 12 }}>Nothing pending.</div>
+          )}
+          {pendingProposals.map((p) => (
+            <div
+              key={p.id}
+              style={{
+                padding: "10px 12px", marginBottom: 8, background: "#fff",
+                border: `3px solid ${C.ink}`, borderRadius: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{p.name}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  value={proposalXP[p.id] || ""}
+                  onChange={(e) => setProposalXP((st) => ({ ...st, [p.id]: e.target.value.replace(/[^0-9]/g, "") }))}
+                  inputMode="numeric"
+                  placeholder="Set XP"
+                  style={{ ...inputStyle, width: 80, textAlign: "center", fontWeight: 700, padding: "6px 8px", fontSize: 13 }}
+                />
+                <button onClick={() => approveProposal(p)} style={btn(C.mint, C.ink, { padding: "6px 12px", fontSize: 12 })}>
+                  Add as quest
+                </button>
+                <button onClick={() => declineProposal(p)} style={btn("#fff", C.red, { borderColor: C.red, padding: "6px 10px", fontSize: 12 })}>
+                  Nope
+                </button>
+                <button
+                  onClick={() => deleteProposal(p.id)}
+                  aria-label="Delete this idea"
+                  style={{ background: "transparent", border: "none", color: C.dim, fontSize: 15, cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Reward wishes */}
+          <div style={{ fontWeight: 900, fontSize: 14, margin: "16px 0 8px", paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+            Reward wishes
+          </div>
+          {pendingWishes.length === 0 && (
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500 }}>Nothing pending.</div>
+          )}
+          {pendingWishes.map((w) => (
+            <div
+              key={w.id}
+              style={{
+                padding: "10px 12px", marginBottom: 8, background: "#fff",
+                border: `3px solid ${C.ink}`, borderRadius: 10,
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{w.text}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  value={assignPick[w.id] || ""}
+                  onChange={(e) => setAssignPick((st) => ({ ...st, [w.id]: e.target.value }))}
+                  style={{ ...inputStyle, flex: 1, minWidth: 130, padding: "6px 8px", fontSize: 12, fontWeight: 700, background: "#fff" }}
+                >
+                  <option value="">Set as reward for…</option>
+                  {Array.from({ length: MAX_LEVEL - 1 }).map((_, i) => (
+                    <option key={i + 2} value={i + 2}>
+                      LV{i + 2}{level >= i + 2 ? " (already reached)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => approveWish(w)} style={btn(C.mint, C.ink, { padding: "6px 10px", fontSize: 12 })}>
+                  Approve
+                </button>
+                <button onClick={() => declineWish(w)} style={btn("#fff", C.red, { borderColor: C.red, padding: "6px 10px", fontSize: 12 })}>
+                  Decline
+                </button>
+                <button
+                  onClick={() => deleteWish(w.id)}
+                  aria-label="Delete this wish"
+                  style={{ background: "transparent", border: "none", color: C.dim, fontSize: 15, cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ======== LOG ======== */}
+      {activeTab === "log" && (
+        <div style={{ ...panelStyle, padding: 16 }}>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
+            {isAdmin ? "Tapped by mistake? Deleting an entry restores its XP" : "Everything earned (and lost) so far"}
+          </div>
+          {s.log.length === 0 && (
+            <div style={{ textAlign: "center", padding: 24, color: C.dim, fontWeight: 500 }}>
+              Nothing logged yet — complete your first quest! ⚔️
+            </div>
+          )}
+          {s.log.map((e) => (
+            <div
+              key={e.id}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 6,
+                background: "#fff", border: `2px solid ${C.ink}`, borderRadius: 10,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {e.hidden && !isAdmin ? "Hidden quest ✨" : e.name}
+                </div>
+                <div style={{ fontSize: 11, color: C.dim }}>{e.time}</div>
+              </div>
+              <div style={{ fontFamily: pixelFont, fontSize: 9, color: e.xp < 0 ? C.red : C.pink }}>
+                {e.xp < 0 ? "" : "+"}{e.xp}XP
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => deleteLog(e)}
+                  aria-label="Delete this entry"
+                  style={{ background: "transparent", border: "none", color: C.dim, fontSize: 15, cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ textAlign: "center", marginTop: 20, color: "rgba(255,255,255,.45)", fontSize: 11 }}>
+        {saveError
+          ? "⚠ Save failing — changes only live on this screen for now"
+          : saveTime
+          ? `Saved ✓ ${saveTime}`
+          : "Progress autosaves · pick up where you left off"}
+        <div style={{ marginTop: 6 }}>
+          <button
+            onClick={() => persistRole(null)}
+            style={{
+              background: "transparent", border: "none", color: "rgba(255,255,255,.45)",
+              fontSize: 11, cursor: "pointer", textDecoration: "underline", fontFamily: bodyFont,
+            }}
+          >
+            Switch role ({isAdmin ? "Game Master" : "Player"})
+          </button>
+        </div>
+      </div>
+
+      {/* Apply confirm dialog */}
+      {applyTarget && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,15,50,.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60,
+          }}
+          onClick={() => setApplyTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ ...panelStyle, padding: "22px 20px", maxWidth: 340, width: "100%", animation: "pop .35s ease-out" }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 4 }}>Apply: {applyTarget.name}</div>
+            <div style={{ fontFamily: pixelFont, fontSize: 10, color: C.pink, marginBottom: 12 }}>
+              +{applyTarget.xp}XP
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.dim, marginBottom: 6 }}>
+              Add a note for her (optional)
+            </div>
+            <textarea
+              value={applyReason}
+              onChange={(e) => setApplyReason(e.target.value)}
+              placeholder="e.g. Told you about the schedule change right away today"
+              rows={3}
+              style={{
+                width: "100%", boxSizing: "border-box", padding: 10, fontSize: 14, fontWeight: 500,
+                border: `3px solid ${C.ink}`, borderRadius: 8, fontFamily: bodyFont, resize: "none",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={() => setApplyTarget(null)}
+                style={btn("#fff", C.dim, { flex: 1, borderColor: C.dim, boxShadow: "none" })}
+              >
+                Cancel
+              </button>
+              <button onClick={confirmApply} style={btn(C.pink, "#fff", { flex: 2 })}>
+                Confirm & send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Claim coupon dialog */}
+      {claimTarget && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,15,50,.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60,
+          }}
+          onClick={() => setClaimTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ ...panelStyle, padding: "22px 20px", maxWidth: 340, width: "100%", animation: "pop .35s ease-out" }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 4 }}>🎟 Claim your coupon</div>
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 12 }}>
+              The reward stays a mystery — pick the date you want to cash it in, and she'll make it happen 😏
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.dim, marginBottom: 6 }}>
+              Use it on…
+            </div>
+            <input
+              type="date"
+              value={claimDate}
+              onChange={(e) => setClaimDate(e.target.value)}
+              style={{
+                width: "100%", boxSizing: "border-box", padding: 10, fontSize: 15, fontWeight: 700,
+                border: `3px solid ${C.ink}`, borderRadius: 8, fontFamily: bodyFont, background: "#fff",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={() => setClaimTarget(null)}
+                style={btn("#fff", C.dim, { flex: 1, borderColor: C.dim, boxShadow: "none" })}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmClaim}
+                style={btn(claimDate ? C.gold : C.dim, C.ink, { flex: 2 })}
+              >
+                Book it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup */}
+      {popup && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,15,50,.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50,
+          }}
+          onClick={() => setPopup(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ ...panelStyle, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "pop .35s ease-out" }}
+          >
+            <div style={{ fontFamily: pixelFont, fontSize: 13, color: popup.type === "down" ? C.red : popup.type === "achieve" || popup.type === "hidden" ? C.gold : C.pink, animation: "blink 1s step-end infinite" }}>
+              {popup.type === "down" ? "▼ LEVEL DOWN... ▼" : popup.type === "achieve" ? "★ ACHIEVEMENT! ★" : popup.type === "hidden" ? "★ HIDDEN QUEST! ★" : "★ LEVEL UP! ★"}
+            </div>
+            {popup.type === "achieve" || popup.type === "hidden" ? (
+              <div style={{ fontSize: 30, margin: "14px 0" }}>{popup.type === "hidden" ? "✨" : "🏆"}</div>
+            ) : (
+              <div style={{ fontFamily: pixelFont, fontSize: 34, margin: "14px 0", color: C.ink }}>
+                LV {popup.level}
+              </div>
+            )}
+            {popup.type === "down" ? (
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.dim, marginBottom: 18 }}>
+                Level lost 💔 Behave better to earn it back
+              </div>
+            ) : popup.type === "hidden" ? (
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.dim, marginBottom: 18 }}>
+                You just cleared a hidden quest… no telling which one 😏 Check your XP!
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.dim, marginBottom: 6 }}>
+                  {popup.type === "achieve" ? `Trophy earned: ${popup.name}` : "Reward unlocked"}
+                </div>
+                <div style={{ background: C.gold, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "12px 14px", fontWeight: 900, fontSize: 16, marginBottom: 18 }}>
+                  {popup.reward}
+                </div>
+              </>
+            )}
+            <button
+              onClick={() => setPopup(null)}
+              style={btn(popup.type === "down" ? C.red : C.pink, "#fff", { padding: "10px 24px", fontSize: 15, borderRadius: 10 })}
+            >
+              {popup.type === "down" ? "Noted… 😢" : "Let's go! 🎉"}
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<BrowniePoints />);
+} catch (e) { window.__showErr("render: " + e.message); }
+</script>
+</body>
+</html>
