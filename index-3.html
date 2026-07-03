@@ -61,9 +61,14 @@ const DEFAULT_TASKS = [
   { id: "t1", name: "Check in about ur plans", xp: 15 },
   { id: "t2", name: "Share about ur day", xp: 15 },
   { id: "t3", name: "Initiate hanging out", xp: 30 },
-  { id: "t4", name: "Plan a proper date", xp: 60, note: "Only when you're off work and have the energy — otherwise just keep things as usual" },
-  { id: "t5", name: "Keep ur words", xp: 25 },
-  { id: "t6", name: "Drive me home", xp: 25 },
+  { id: "t4", name: "Keep ur words", xp: 25 },
+  { id: "t5", name: "Drive me home", xp: 25 },
+  { id: "t6", name: "lmk when he was taking a shit WOW", xp: 20 },
+  { id: "t7", name: "Temp me with his collarbone (im starving)", xp: 15 },
+  { id: "t8", name: "🏆FIFO SURVIVOR: Finished a long day at work", xp: 5 },
+  { id: "t9", name: "Send some random photo/vid", xp: 15 },
+  { id: "t10", name: "Share what ur eating", xp: 15 },
+  { id: "t11", name: "Show me today's weather", xp: 15 },
 ];
 
 const DEFAULT_PENALTIES = [
@@ -86,12 +91,16 @@ const DEFAULT_REWARDS = {
 };
 
 const DEFAULT_ACHIEVEMENTS = [
-  { id: "a1", taskId: "t1", target: 15, reward: "Dinner on me 🍜", claimed: false },
-  { id: "a2", taskId: "t2", target: 15, reward: "Lazy afternoon together", claimed: false },
-  { id: "a3", taskId: "t3", target: 8, reward: "I'll plan our next hangout", claimed: false },
-  { id: "a4", taskId: "t4", target: 3, reward: "Next date is fully on me", claimed: false },
-  { id: "a5", taskId: "t5", target: 20, reward: "Trust jackpot: mystery reward 🎁", claimed: false },
-  { id: "a6", taskId: "t6", target: 10, reward: "Road-trip snacks on me 🍫", claimed: false },
+  { id: "a1", taskId: "t1", target: 7, reward: "TITS PIC", claimed: false },
+  { id: "a2", taskId: "t5", target: 5, reward: "BJ IN DA CAR 🤙", claimed: false },
+  { id: "a3", taskId: "t3", target: 10, reward: "ask what he wants", claimed: false },
+  { id: "a4", taskId: "t2", target: 10, reward: "TIT PIC 🪄", claimed: false },
+  { id: "a5", taskId: "t6", target: 10, reward: "tit pic", claimed: false },
+  { id: "a6", taskId: "t7", target: 20, reward: "get a vid", claimed: false },
+  { id: "a7", taskId: "t8", target: 14, reward: "ask him what he wants!", claimed: false },
+  { id: "a8", taskId: "t9", target: 14, reward: "get pics", claimed: false },
+  { id: "a9", taskId: "t10", target: 20, reward: "get pics!", claimed: false },
+  { id: "a10", taskId: "t11", target: 25, reward: "i have no idea it's a trick 🤓🤞", claimed: false },
 ];
 
 const GAME_PATH = "games/lrn0308-k7q2x9fw3m/shared"; // secret random path for your game data
@@ -101,6 +110,71 @@ const ADMIN_PIN = "0308"; // only this code opens Game Master
 const ROLE_KEY = "bp-role-v1";     // personal (this device): remembers which side you are
 const SEEN_KEY = "bp-seen-v1";     // personal (this device): seen notifications
 
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+};
+const isToday = (ts) => ts && new Date(ts).toDateString() === new Date().toDateString();
+
+// Daily Q&A: one question per day, XP scales with level (LV1=5, LV2=15, LV3=25…)
+const QUIZ_BANK = [
+  "What made you smile today?",
+  "What's one thing I did recently that you loved?",
+  "If we could teleport anywhere right now, where would you take me?",
+  "What song reminds you of me?",
+  "What's your favorite memory of us so far?",
+  "What food do you think I'd never say no to?",
+  "What's something small I do that you secretly enjoy?",
+  "If today had a title like a movie, what would it be?",
+  "What's one thing you want us to try together?",
+  "Coffee date or midnight snack run — which suits us better and why?",
+  "What did you eat today? Rate it out of 10.",
+  "What's one thing you're proud of this week?",
+  "If I was a dessert, what would I be?",
+  "What's the best part of your day so far?",
+  "Which of my quirks did you notice first?",
+  "What's a place you want to take me before the year ends?",
+  "What's something new you learned recently?",
+  "Describe me in exactly three words.",
+  "What's a tiny thing that made today better?",
+  "If we had a couples' theme song, what would it be?",
+  "What are you looking forward to this week?",
+  "What's your current favorite photo of us (or of me 😏)?",
+  "One thing you'd do if you had a totally free day tomorrow?",
+  "What's a smell that reminds you of me?",
+  "What would we name our future pet?",
+  "What's the last thing that made you laugh out loud?",
+  "Which meal should I learn to cook for you?",
+  "What's one goal you have this month?",
+  "If you could replay one of our days together, which one?",
+  "What's something you've been meaning to tell me?",
+];
+const quizForToday = () => {
+  const t = todayStr();
+  let h = 0;
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return QUIZ_BANK[h % QUIZ_BANK.length];
+};
+const quizXPForLevel = (lv) => 5 + (lv - 1) * 10;
+
+// Lucky wheel: spin unlocked by clearing 4+ quests in one day (hidden quests don't count)
+const WHEEL_PRIZES = [
+  { kind: "xp", amount: 10, label: "+10 XP", weight: 30 },
+  { kind: "xp", amount: 15, label: "+15 XP", weight: 30 },
+  { kind: "xp", amount: 25, label: "+25 XP", weight: 22 },
+  { kind: "xp", amount: 50, label: "+50 XP", weight: 12 },   // second rarest
+  { kind: "pic", label: "Titty pic voucher 🌶️", weight: 6 }, // rarest jackpot
+];
+const pickWheelPrize = () => {
+  const total = WHEEL_PRIZES.reduce((a, p) => a + p.weight, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < WHEEL_PRIZES.length; i++) {
+    r -= WHEEL_PRIZES[i].weight;
+    if (r <= 0) return i;
+  }
+  return 0;
+};
+
 // Firebase strips empty arrays/objects, so re-fill them on read
 const normalizeShared = (data) => {
   const base = { ...DEFAULT_SHARED, ...(data || {}) };
@@ -108,6 +182,13 @@ const normalizeShared = (data) => {
     (k) => { if (!Array.isArray(base[k])) base[k] = Object.values(base[k] || {}); }
   );
   ["taskCounts", "claimed", "rewards"].forEach((k) => { if (!base[k]) base[k] = {}; });
+  ["reverseQuests", "seasonHistory"].forEach(
+    (k) => { if (!Array.isArray(base[k])) base[k] = Object.values(base[k] || {}); }
+  );
+  if (!base.season || !base.season.number) base.season = { number: 1 };
+  if (!base.wheel) base.wheel = { lastSpinDate: null };
+  base.boost = !!base.boost;
+  if (!base.dailyQA) base.dailyQA = null;
   return base;
 };
 
@@ -117,7 +198,14 @@ const DEFAULT_SHARED = {
   penalties: DEFAULT_PENALTIES,
   rewards: DEFAULT_REWARDS,
   achievements: DEFAULT_ACHIEVEMENTS,
-  hiddenTasks: [],
+  hiddenTasks: [
+    { id: "h1", name: "Remember the little things I say", xp: 25 },
+    { id: "h2", name: "Small sweet gesture in person", xp: 20 },
+    { id: "h3", name: "Own up to a mistake", xp: 40 },
+    { id: "h4", name: "listen and make changes", xp: 30 },
+    { id: "h5", name: "pay for me", xp: 15 },
+    { id: "h6", name: "ask how's my day", xp: 5 },
+  ],
   taskCounts: {},
   totalXP: 0,
   claimed: {},
@@ -125,7 +213,13 @@ const DEFAULT_SHARED = {
   requests: [],   // {id, taskId, name, xp, time, status: pending|approved|declined}
   proposals: [],  // {id, name, time, status: pending|approved|declined}
   wishes: [],     // {id, text, time, status: pending|approved|declined, assignedTo}
-  coupons: [],    // {id, achievementId, questName, reward, useDate, time, ts, status: pending|fulfilled}
+  coupons: [],    // {id, questName, reward, useDate, time, ts, status: won|pending|fulfilled, revealed}
+  dailyQA: null,  // {date, question, answer, xp, time, ts}
+  wheel: { lastSpinDate: null },
+  boost: false,   // 1.5x XP event toggle (Game Master)
+  reverseQuests: [], // {id, name, time, ts, status: open|accepted|done|declined, doneTs, doneTime}
+  season: { number: 1 },
+  seasonHistory: [], // {number, level, totalXP, time, ts}
 };
 
 function levelFromXP(xp) {
@@ -150,6 +244,9 @@ const C = {
   mint: "#59d6a2",
   red: "#e84855",
   dim: "#8a84b8",
+  blue: "#5aa9e6",      // daily Q&A
+  blueBg: "#eaf4ff",
+  purple: "#7c6ff0",    // Apply button
 };
 const pixelFont = "'Press Start 2P', monospace";
 const bodyFont = "'Outfit', sans-serif";
@@ -184,6 +281,11 @@ function BrowniePoints() {
   const [hidName, setHidName] = useState("");
   const [hidXP, setHidXP] = useState("40");
   const [seenIds, setSeenIds] = useState([]);
+  const [quizAnswer, setQuizAnswer] = useState("");
+  const [wheelSpin, setWheelSpin] = useState(null); // null | {deg} while spinning
+  const [reverseText, setReverseText] = useState("");
+  const [useCouponTarget, setUseCouponTarget] = useState(null); // a "won" coupon being booked
+  const [useCouponDate, setUseCouponDate] = useState("");
   const sharedRef = useRef(null);
 
   const persistSeen = (ids) => {
@@ -321,7 +423,8 @@ function BrowniePoints() {
   const pendingProposals = s.proposals.filter((p) => p.status === "pending");
   const pendingWishes = s.wishes.filter((w) => w.status === "pending");
   const pendingCoupons = (s.coupons || []).filter((c) => c.status === "pending");
-  const inboxCount = pendingRequests.length + pendingProposals.length + pendingWishes.length + pendingCoupons.length;
+  const openReverseCount = (s.reverseQuests || []).filter((q) => q.status === "open").length;
+  const inboxCount = pendingRequests.length + pendingProposals.length + pendingWishes.length + pendingCoupons.length + openReverseCount;
 
   // player notifications: request results + hidden quest clears
   const playerNotifs = [
@@ -356,18 +459,57 @@ function BrowniePoints() {
         text: `Coupon fulfilled: ${c.reward}`,
       })),
   ].sort((a, b) => b.ts - a.ts);
-  const unseenCount = playerNotifs.filter((n) => !seenIds.includes(n.id)).length;
+  // reverse quest completions also notify the player
+  const reverseNotifs = (s.reverseQuests || [])
+    .filter((q) => q.status === "done")
+    .map((q) => ({
+      id: "rev-" + q.id,
+      ts: q.doneTs || q.ts || 0,
+      time: q.doneTime || q.time,
+      icon: "💝",
+      text: `She completed your quest: ${q.name}`,
+    }));
+  const allPlayerNotifs = [...playerNotifs, ...reverseNotifs].sort((a, b) => b.ts - a.ts);
+  const unseenCount = allPlayerNotifs.filter((n) => !seenIds.includes(n.id)).length;
+
+  // 1.5x XP event
+  const boostOn = !!s.boost;
+  const effXP = (xp) => (boostOn ? Math.round(xp * 1.5) : xp);
+
+  // daily Q&A
+  const quizQuestion = quizForToday();
+  const quizDone = s.dailyQA && s.dailyQA.date === todayStr();
+  const quizXP = effXP(quizXPForLevel(level));
+
+  // lucky wheel: 4+ non-hidden quest completions today unlock one spin per day
+  const questsToday = s.log.filter((l) => l.xp > 0 && l.taskId && !l.hidden && isToday(l.ts)).length;
+  const spinUsedToday = s.wheel && s.wheel.lastSpinDate === todayStr();
+  const canSpin = questsToday >= 4 && !spinUsedToday;
+
+  const openReverse = (s.reverseQuests || []).filter((q) => q.status === "open" || q.status === "accepted");
+
+  // weekly report: highlight of the week + the day he earned the most XP
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weekEntries = s.log.filter((l) => l.xp > 0 && l.ts && l.ts >= weekAgo);
+  const weekTotal = weekEntries.reduce((a, l) => a + l.xp, 0);
+  const weekHighlight = weekEntries.reduce((best, l) => (!best || l.xp > best.xp ? l : best), null);
+  const dayTotals = {};
+  weekEntries.forEach((l) => {
+    const k = new Date(l.ts).toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
+    dayTotals[k] = (dayTotals[k] || 0) + l.xp;
+  });
+  const bestDay = Object.entries(dayTotals).reduce((best, cur) => (!best || cur[1] > best[1] ? cur : best), null);
 
   // player: opening the inbox marks everything as seen
   useEffect(() => {
     if (booted && role === "player" && tab === "inbox") {
-      const allIds = playerNotifs.map((n) => n.id);
+      const allIds = allPlayerNotifs.map((n) => n.id);
       if (allIds.some((id) => !seenIds.includes(id))) {
         persistSeen(Array.from(new Set([...seenIds, ...allIds])));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, booted, role, playerNotifs.length]);
+  }, [tab, booted, role, allPlayerNotifs.length]);
 
   // ---------- Player actions ----------
   const [applyTarget, setApplyTarget] = useState(null); // task being applied for
@@ -384,7 +526,7 @@ function BrowniePoints() {
       id: uid(),
       taskId: applyTarget.id,
       name: applyTarget.name,
-      xp: applyTarget.xp,
+      xp: effXP(applyTarget.xp),
       reason: applyReason.trim() || null,
       time: now(),
       ts: Date.now(),
@@ -450,6 +592,108 @@ function BrowniePoints() {
     setClaimDate("");
   };
 
+  const submitQuiz = () => {
+    if (!quizAnswer.trim() || quizDone) return;
+    const xp = quizXP;
+    const granted = grantXP(s, "Daily Q&A ✍️", xp, null);
+    saveShared({
+      ...s,
+      ...granted,
+      dailyQA: { date: todayStr(), question: quizQuestion, answer: quizAnswer.trim(), xp, time: now(), ts: Date.now() },
+    });
+    setQuizAnswer("");
+    setPopup({ type: "gain", title: "DAILY Q&A!", text: `Answer received — you've automatically gained +${xp} XP!!!` });
+  };
+
+  const spinWheel = () => {
+    if (!canSpin || wheelSpin) return;
+    const idx = pickWheelPrize();
+    const prize = WHEEL_PRIZES[idx];
+    // spin animation: land on the chosen slice
+    const slice = 360 / WHEEL_PRIZES.length;
+    const deg = 5 * 360 + (360 - (idx * slice + slice / 2));
+    setWheelSpin({ deg });
+    setTimeout(() => {
+      setWheelSpin(null);
+      if (prize.kind === "xp") {
+        const granted = grantXP(s, "Lucky wheel 🎰", prize.amount, null);
+        saveShared({ ...s, ...granted, wheel: { lastSpinDate: todayStr() } });
+        setPopup({ type: "gain", title: "LUCKY WHEEL!", text: `You've automatically gained +${prize.amount} XP!!!` });
+      } else {
+        const coupon = {
+          id: uid(),
+          questName: "Lucky wheel 🎰",
+          reward: prize.label,
+          revealed: true,
+          useDate: null,
+          time: now(),
+          ts: Date.now(),
+          status: "won",
+        };
+        saveShared({ ...s, coupons: [coupon, ...(s.coupons || [])].slice(0, 100), wheel: { lastSpinDate: todayStr() } });
+        setPopup({ type: "gain", title: "JACKPOT!", text: `You won: ${prize.label} — it's in your Rewards wallet. Pick a date and claim it 😏` });
+      }
+    }, 2700);
+  };
+
+  const openUseCoupon = (c) => {
+    setUseCouponDate("");
+    setUseCouponTarget(c);
+  };
+
+  const confirmUseCoupon = () => {
+    if (!useCouponTarget || !useCouponDate) return;
+    saveShared({
+      ...s,
+      coupons: (s.coupons || []).map((x) =>
+        x.id === useCouponTarget.id ? { ...x, status: "pending", useDate: useCouponDate } : x
+      ),
+    });
+    setUseCouponTarget(null);
+    setUseCouponDate("");
+  };
+
+  const addReverseQuest = () => {
+    if (!reverseText.trim()) return;
+    const q = { id: uid(), name: reverseText.trim(), time: now(), ts: Date.now(), status: "open" };
+    saveShared({ ...s, reverseQuests: [q, ...(s.reverseQuests || [])].slice(0, 50) });
+    setReverseText("");
+  };
+
+  const setReverseStatus = (id, status) =>
+    saveShared({
+      ...s,
+      reverseQuests: (s.reverseQuests || []).map((q) =>
+        q.id === id
+          ? { ...q, status, ...(status === "done" ? { doneTs: Date.now(), doneTime: now() } : {}) }
+          : q
+      ),
+    });
+
+  const deleteReverse = (id) =>
+    saveShared({ ...s, reverseQuests: (s.reverseQuests || []).filter((q) => q.id !== id) });
+
+  const toggleBoost = () => saveShared({ ...s, boost: !s.boost });
+
+  const endSeason = () => {
+    if (!window.confirm(`End Season ${s.season.number}? A season badge is saved with his current level & XP, and the new season starts with a -200 XP entry fee. Everything else stays.`)) return;
+    const newTotal = Math.max(0, s.totalXP - 200);
+    const entry = {
+      id: uid(), taskId: null, name: `Season ${s.season.number + 1} entry fee 🏁`,
+      xp: -(s.totalXP - newTotal), time: now(), ts: Date.now(),
+    };
+    saveShared({
+      ...s,
+      seasonHistory: [
+        ...(s.seasonHistory || []),
+        { number: s.season.number, level, totalXP: s.totalXP, time: now(), ts: Date.now() },
+      ],
+      season: { number: s.season.number + 1 },
+      totalXP: newTotal,
+      log: [entry, ...s.log].slice(0, 200),
+    });
+  };
+
   const fulfillCoupon = (c) =>
     saveShared({
       ...s,
@@ -513,7 +757,7 @@ function BrowniePoints() {
     saveShared({ ...s, requests: s.requests.map((r) => (r.id === req.id ? { ...r, status: "declined" } : r)) });
 
   const completeTaskDirect = (task) => {
-    const granted = grantXP(s, task.name, task.xp, task.id);
+    const granted = grantXP(s, task.name, effXP(task.xp), task.id);
     saveShared({ ...s, ...granted });
     setFlash(task.id);
     setTimeout(() => setFlash(null), 700);
@@ -761,6 +1005,16 @@ function BrowniePoints() {
         <h1 style={{ margin: 0, color: "#fff", fontSize: 24, fontWeight: 900, fontFamily: pixelFont, textShadow: "3px 3px 0 rgba(0,0,0,.4)", lineHeight: 1.4 }}>
           BROWNIE<br />POINTS
         </h1>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+          <span style={{ fontFamily: pixelFont, fontSize: 8, color: C.panel, background: "rgba(255,255,255,.12)", border: `2px solid rgba(255,255,255,.25)`, borderRadius: 6, padding: "5px 8px" }}>
+            SEASON {s.season.number}
+          </span>
+          {boostOn && (
+            <span style={{ fontFamily: pixelFont, fontSize: 8, color: C.ink, background: C.gold, border: `2px solid ${C.ink}`, borderRadius: 6, padding: "5px 8px", animation: "blink 1.2s step-end infinite" }}>
+              ⚡ 1.5x XP EVENT!
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Status HUD */}
@@ -855,6 +1109,76 @@ function BrowniePoints() {
               ? 'Approve his requests in the Inbox, or tap "Done" to grant XP directly ✦'
               : 'Did one of these? Tap "Apply" — she reviews and grants the XP ✦'}
           </div>
+
+          {isAdmin && (
+            <button
+              onClick={toggleBoost}
+              style={{
+                width: "100%", marginBottom: 12, padding: "10px 12px", cursor: "pointer",
+                background: boostOn ? C.gold : "transparent", color: C.ink,
+                border: `3px ${boostOn ? "solid" : "dashed"} ${boostOn ? C.ink : C.gold}`,
+                borderRadius: 10, fontWeight: 900, fontSize: 13, fontFamily: bodyFont,
+                boxShadow: boostOn ? "2px 2px 0 rgba(0,0,0,.3)" : "none",
+              }}
+            >
+              {boostOn ? "⚡ 1.5x XP EVENT IS LIVE — tap to end it" : "⚡ Start a 1.5x XP event (all quests, not penalties)"}
+            </button>
+          )}
+
+          {/* Daily Q&A (player) */}
+          {!isAdmin && (
+            <div style={{ marginBottom: 12, padding: "12px 12px", border: `3px solid ${C.blue}`, borderRadius: 10, background: C.blueBg }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <span style={{ fontWeight: 900, fontSize: 14 }}>✍️ Daily Q&A</span>
+                <span style={{ fontFamily: pixelFont, fontSize: 9, color: C.blue }}>+{quizXP}XP</span>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{quizQuestion}</div>
+              {quizDone ? (
+                <div style={{ fontSize: 12, color: C.mint, fontWeight: 900 }}>
+                  Answered today ✓ — come back tomorrow for a new one!
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={quizAnswer}
+                    onChange={(e) => setQuizAnswer(e.target.value)}
+                    placeholder="Type your answer…"
+                    style={{ ...inputStyle, flex: 1, minWidth: 0, borderColor: C.blue }}
+                  />
+                  <button onClick={submitQuiz} style={btn(C.blue)}>Answer</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Lucky wheel (player) */}
+          {!isAdmin && (
+            <div style={{ marginBottom: 12, padding: "12px 12px", border: `3px solid ${C.gold}`, borderRadius: 10, background: "#fffbe8" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <span style={{ fontWeight: 900, fontSize: 14 }}>🎰 Lucky wheel</span>
+                <span style={{ fontFamily: pixelFont, fontSize: 9, color: C.gold }}>{Math.min(questsToday, 4)}/4</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 8 }}>
+                Clear 4 quests in one day (hidden quests don't count) to unlock one spin. Prizes: +10 / +15 / +25 / +50 XP… or the jackpot 🌶️
+              </div>
+              <div style={{ display: "flex", gap: 2, background: C.ink, padding: 3, borderRadius: 6, marginBottom: 8 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} style={{ flex: 1, height: 8, borderRadius: 2, background: i < questsToday ? C.gold : "rgba(255,255,255,0.12)" }} />
+                ))}
+              </div>
+              {spinUsedToday ? (
+                <div style={{ fontSize: 12, color: C.mint, fontWeight: 900 }}>Spun today ✓ — new spin unlocks tomorrow!</div>
+              ) : (
+                <button
+                  onClick={spinWheel}
+                  disabled={!canSpin}
+                  style={{ ...btn(canSpin ? C.gold : C.dim, C.ink), width: "100%", opacity: canSpin ? 1 : 0.7, cursor: canSpin ? "pointer" : "default" }}
+                >
+                  {canSpin ? "SPIN! 🎰" : `Clear ${4 - questsToday} more quest${4 - questsToday === 1 ? "" : "s"} today to spin`}
+                </button>
+              )}
+            </div>
+          )}
           {s.tasks.length === 0 && (
             <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
               No quests yet!
@@ -878,8 +1202,8 @@ function BrowniePoints() {
                     <div style={{ fontSize: 11, color: C.dim, fontWeight: 500, marginTop: 2 }}>({t.note})</div>
                   )}
                 </div>
-                <div style={{ fontFamily: pixelFont, fontSize: 10, color: C.pink, whiteSpace: "nowrap" }}>
-                  +{t.xp}XP
+                <div style={{ fontFamily: pixelFont, fontSize: 10, color: boostOn ? C.gold : C.pink, whiteSpace: "nowrap" }}>
+                  +{effXP(t.xp)}XP{boostOn ? "⚡" : ""}
                 </div>
                 {isAdmin ? (
                   <>
@@ -897,7 +1221,7 @@ function BrowniePoints() {
                 ) : hasPending ? (
                   <span style={{ fontSize: 10, fontFamily: pixelFont, color: C.gold }}>SENT ✦</span>
                 ) : (
-                  <button onClick={() => openApply(t)} style={btn(C.pink, "#fff", { padding: "6px 12px" })}>
+                  <button onClick={() => openApply(t)} style={btn(C.purple, "#fff", { padding: "6px 12px" })}>
                     Apply
                   </button>
                 )}
@@ -979,7 +1303,7 @@ function BrowniePoints() {
                     placeholder="e.g. Walk you home"
                     style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                   />
-                  <button onClick={submitProposal} style={btn(C.pink)}>
+                  <button onClick={submitProposal} style={btn(C.purple)}>
                     Pitch
                   </button>
                 </div>
@@ -996,6 +1320,56 @@ function BrowniePoints() {
                     {p.status === "pending" && (
                       <button
                         onClick={() => withdrawProposal(p.id)}
+                        style={{
+                          background: "transparent", border: `2px solid ${C.dim}`, color: C.dim,
+                          borderRadius: 6, padding: "3px 8px", fontWeight: 700, fontSize: 11,
+                          cursor: "pointer", fontFamily: bodyFont, whiteSpace: "nowrap",
+                        }}
+                      >
+                        ↩ Undo
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Reverse quests: he assigns quests to her */}
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+                <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4 }}>💝 Quests for her</div>
+                <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 8 }}>
+                  Your turn to assign quests — one rule: it can't be something that's already a reward 😌
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={reverseText}
+                    onChange={(e) => setReverseText(e.target.value)}
+                    placeholder="e.g. Play one game with me"
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                  />
+                  <button onClick={addReverseQuest} style={btn(C.purple)}>Assign</button>
+                </div>
+                {(s.reverseQuests || []).slice(0, 6).map((q) => (
+                  <div
+                    key={q.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", marginTop: 6,
+                      background: q.status === "done" ? "#eafff2" : "#fff",
+                      border: `2px solid ${q.status === "done" ? C.mint : q.status === "declined" ? C.dim : C.ink}`,
+                      borderRadius: 8, opacity: q.status === "declined" ? 0.7 : 1,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, textDecoration: q.status === "declined" ? "line-through" : "none" }}>{q.name}</div>
+                      <div style={{ fontSize: 10, color: C.dim }}>
+                        {q.status === "open" && "waiting for her…"}
+                        {q.status === "accepted" && "she accepted 👀"}
+                        {q.status === "done" && "completed 🎉"}
+                        {q.status === "declined" && "declined"}
+                      </div>
+                    </div>
+                    {q.status === "done" ? <span style={{ fontSize: 13 }}>✅</span> : q.status === "declined" ? <span style={{ fontSize: 13 }}>🚫</span> : (
+                      <button
+                        onClick={() => deleteReverse(q.id)}
                         style={{
                           background: "transparent", border: `2px solid ${C.dim}`, color: C.dim,
                           borderRadius: 6, padding: "3px 8px", fontWeight: 700, fontSize: 11,
@@ -1209,6 +1583,21 @@ function BrowniePoints() {
           <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
             Repeat the same quest enough times to unlock its own reward 🏆
           </div>
+          {(s.seasonHistory || []).length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {(s.seasonHistory || []).map((h) => (
+                <span
+                  key={h.number}
+                  style={{
+                    fontFamily: pixelFont, fontSize: 8, background: "#fffbe8", border: `2px solid ${C.gold}`,
+                    borderRadius: 6, padding: "5px 7px", color: C.ink,
+                  }}
+                >
+                  🏅 S{h.number} · LV{h.level}
+                </span>
+              ))}
+            </div>
+          )}
           {s.achievements.length === 0 && (
             <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
               No trophies yet!
@@ -1374,6 +1763,32 @@ function BrowniePoints() {
             );
           })}
 
+          {/* Season control */}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: `3px dashed ${C.dim}` }}>
+            <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 4 }}>🏁 Season {s.season.number}</div>
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 8 }}>
+              Ending a season saves a badge with his final level & XP, then resets progress to zero for a fresh start. Quests, rewards and trophies are kept.
+            </div>
+            {(s.seasonHistory || []).length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                {(s.seasonHistory || []).map((h) => (
+                  <span
+                    key={h.number}
+                    style={{
+                      fontFamily: pixelFont, fontSize: 8, background: "#fffbe8", border: `2px solid ${C.gold}`,
+                      borderRadius: 6, padding: "5px 7px", color: C.ink,
+                    }}
+                  >
+                    🏅 S{h.number} · LV{h.level} · {h.totalXP}XP
+                  </span>
+                ))}
+              </div>
+            )}
+            <button onClick={endSeason} style={btn("#fff", C.ink, { border: `3px solid ${C.gold}`, fontSize: 12 })}>
+              End Season {s.season.number} & start Season {s.season.number + 1}
+            </button>
+          </div>
+
           <div style={{ textAlign: "center", marginTop: 14, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => setShowBackup((v) => !v)} style={btn("transparent", C.ink, { border: `2px solid ${C.ink}`, boxShadow: "none", fontSize: 12 })}>
               {showBackup ? "Hide backup" : "Backup / Restore"}
@@ -1441,7 +1856,7 @@ function BrowniePoints() {
               placeholder="I want… (e.g. you cook for me once)"
               style={{ ...inputStyle, flex: 1, minWidth: 0 }}
             />
-            <button onClick={submitWish} style={btn(C.pink)}>Wish</button>
+            <button onClick={submitWish} style={btn(C.purple)}>Wish</button>
           </div>
           {s.wishes.length === 0 && (
             <div style={{ textAlign: "center", padding: 20, color: C.dim, fontWeight: 500 }}>
@@ -1499,14 +1914,18 @@ function BrowniePoints() {
                 <span style={{ fontSize: 20 }}>🎟</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 900, fontSize: 14 }}>
-                    {c.status === "fulfilled" ? c.reward : "Mystery reward 🎁"}
+                    {c.status === "fulfilled" || c.revealed ? c.reward : "Mystery reward 🎁"}
                   </div>
                   <div style={{ fontSize: 11, color: C.dim, fontWeight: 500 }}>
-                    From: {c.questName} · Use on: {c.useDate}
+                    From: {c.questName}{c.useDate ? ` · Use on: ${c.useDate}` : ""}
                   </div>
                 </div>
                 {c.status === "fulfilled" ? (
                   <span style={{ fontSize: 11, fontWeight: 900, color: C.mint, whiteSpace: "nowrap" }}>Fulfilled 🎉</span>
+                ) : c.status === "won" ? (
+                  <button onClick={() => openUseCoupon(c)} style={btn(C.gold, C.ink, { padding: "6px 10px", whiteSpace: "nowrap" })}>
+                    Use it
+                  </button>
                 ) : (
                   <span style={{ fontFamily: pixelFont, fontSize: 8, color: C.gold, whiteSpace: "nowrap" }}>BOOKED ✦</span>
                 )}
@@ -1522,12 +1941,12 @@ function BrowniePoints() {
           <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
             Verdicts on your requests & hidden quest alerts land here 📬 (tap Sync up top for new stuff)
           </div>
-          {playerNotifs.length === 0 && (
+          {allPlayerNotifs.length === 0 && (
             <div style={{ textAlign: "center", padding: 24, color: C.dim, fontWeight: 500 }}>
               Nothing yet — go apply for some quests! ⚔️
             </div>
           )}
-          {playerNotifs.map((n) => {
+          {allPlayerNotifs.map((n) => {
             const isNew = !seenIds.includes(n.id);
             return (
               <div
@@ -1559,6 +1978,47 @@ function BrowniePoints() {
           <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
             Everything he sent you lands here 📥 (tap Sync up top for new stuff)
           </div>
+
+          {/* Today's Q&A answer */}
+          {s.dailyQA && s.dailyQA.date === todayStr() && (
+            <div style={{ marginBottom: 14, padding: "10px 12px", border: `3px solid ${C.blue}`, borderRadius: 10, background: C.blueBg }}>
+              <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 2 }}>✍️ Today's Q&A</div>
+              <div style={{ fontSize: 12, color: C.dim, fontWeight: 700 }}>{s.dailyQA.question}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, fontStyle: "italic", marginTop: 4 }}>💬 "{s.dailyQA.answer}"</div>
+            </div>
+          )}
+
+          {/* His quests for her */}
+          {(s.reverseQuests || []).filter((q) => q.status === "open" || q.status === "accepted").length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>💝 His quests for you</div>
+              {(s.reverseQuests || []).filter((q) => q.status === "open" || q.status === "accepted").map((q) => (
+                <div
+                  key={q.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", marginBottom: 8,
+                    background: "#fff", border: `3px solid ${C.pink}`, borderRadius: 10, flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 120, fontWeight: 700, fontSize: 14 }}>{q.name}</div>
+                  {q.status === "open" ? (
+                    <>
+                      <button onClick={() => setReverseStatus(q.id, "accepted")} style={btn(C.mint, C.ink, { padding: "6px 10px", fontSize: 12 })}>
+                        Accept
+                      </button>
+                      <button onClick={() => setReverseStatus(q.id, "declined")} style={btn("#fff", C.red, { borderColor: C.red, padding: "6px 10px", fontSize: 12 })}>
+                        Nope
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => setReverseStatus(q.id, "done")} style={btn(C.gold, C.ink, { padding: "6px 10px", fontSize: 12 })}>
+                      Mark done ✓
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Coupons to fulfill */}
           <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 8 }}>🎟 Coupons to fulfill</div>
@@ -1718,6 +2178,26 @@ function BrowniePoints() {
           <div style={{ fontSize: 13, color: C.dim, fontWeight: 700, marginBottom: 12 }}>
             {isAdmin ? "Tapped by mistake? Deleting an entry restores its XP" : "Everything earned (and lost) so far"}
           </div>
+
+          {weekEntries.length > 0 && (
+            <div style={{ marginBottom: 14, padding: "12px 12px", border: `3px solid ${C.ink}`, borderRadius: 10, background: "#f3f0ff" }}>
+              <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 6 }}>📊 Weekly report</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                ⭐ Highlight of the week:{" "}
+                <span style={{ color: "#5b4bc4" }}>
+                  {weekHighlight.hidden && !isAdmin ? "Hidden quest ✨" : weekHighlight.name} (+{weekHighlight.xp} XP)
+                </span>
+              </div>
+              {bestDay && (
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                  🔥 Biggest XP day: <span style={{ color: "#5b4bc4" }}>{bestDay[0]} · +{bestDay[1]} XP</span>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: C.dim, fontWeight: 500 }}>
+                Total this week: +{weekTotal} XP across {weekEntries.length} entries
+              </div>
+            </div>
+          )}
           {s.log.length === 0 && (
             <div style={{ textAlign: "center", padding: 24, color: C.dim, fontWeight: 500 }}>
               Nothing logged yet — complete your first quest! ⚔️
@@ -1811,8 +2291,83 @@ function BrowniePoints() {
               >
                 Cancel
               </button>
-              <button onClick={confirmApply} style={btn(C.pink, "#fff", { flex: 2 })}>
+              <button onClick={confirmApply} style={btn(C.purple, "#fff", { flex: 2 })}>
                 Confirm & send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wheel spinning overlay */}
+      {wheelSpin && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,15,50,.85)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 70,
+          }}
+        >
+          <div style={{ position: "relative", width: 240, height: 240 }}>
+            <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", fontSize: 28, zIndex: 2 }}>🔻</div>
+            <div
+              style={{
+                width: 240, height: 240, borderRadius: "50%", border: `6px solid ${C.gold}`,
+                background: `conic-gradient(${C.pink} 0deg 72deg, ${C.gold} 72deg 144deg, ${C.mint} 144deg 216deg, #7c6ff0 216deg 288deg, ${C.red} 288deg 360deg)`,
+                transform: `rotate(${wheelSpin.deg}deg)`,
+                transition: "transform 2.5s cubic-bezier(.15,.9,.25,1)",
+                boxShadow: "0 0 40px rgba(255,201,69,.4)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: pixelFont, fontSize: 28, pointerEvents: "none",
+              }}
+            >
+              🎰
+            </div>
+          </div>
+          <div style={{ marginTop: 20, fontFamily: pixelFont, fontSize: 12, color: C.gold, animation: "blink 1s step-end infinite" }}>
+            SPINNING...
+          </div>
+        </div>
+      )}
+
+      {/* Use won coupon dialog */}
+      {useCouponTarget && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(20,15,50,.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60,
+          }}
+          onClick={() => setUseCouponTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ ...panelStyle, padding: "22px 20px", maxWidth: 340, width: "100%", animation: "pop .35s ease-out" }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 4 }}>🎟 Use: {useCouponTarget.reward}</div>
+            <div style={{ fontSize: 12, color: C.dim, fontWeight: 500, marginBottom: 12 }}>
+              Pick the date you want to cash this in — it goes straight to her inbox 😏
+            </div>
+            <input
+              type="date"
+              value={useCouponDate}
+              onChange={(e) => setUseCouponDate(e.target.value)}
+              style={{
+                width: "100%", boxSizing: "border-box", padding: 10, fontSize: 15, fontWeight: 700,
+                border: `3px solid ${C.ink}`, borderRadius: 8, fontFamily: bodyFont, background: "#fff",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={() => setUseCouponTarget(null)}
+                style={btn("#fff", C.dim, { flex: 1, borderColor: C.dim, boxShadow: "none" })}
+              >
+                Cancel
+              </button>
+              <button onClick={confirmUseCoupon} style={btn(useCouponDate ? C.gold : C.dim, C.ink, { flex: 2 })}>
+                Send it!
               </button>
             </div>
           </div>
@@ -1879,11 +2434,11 @@ function BrowniePoints() {
             onClick={(e) => e.stopPropagation()}
             style={{ ...panelStyle, padding: "28px 24px", maxWidth: 340, width: "100%", textAlign: "center", animation: "pop .35s ease-out" }}
           >
-            <div style={{ fontFamily: pixelFont, fontSize: 13, color: popup.type === "down" ? C.red : popup.type === "achieve" || popup.type === "hidden" ? C.gold : C.pink, animation: "blink 1s step-end infinite" }}>
-              {popup.type === "down" ? "▼ LEVEL DOWN... ▼" : popup.type === "achieve" ? "★ ACHIEVEMENT! ★" : popup.type === "hidden" ? "★ HIDDEN QUEST! ★" : "★ LEVEL UP! ★"}
+            <div style={{ fontFamily: pixelFont, fontSize: 13, color: popup.type === "down" ? C.red : popup.type === "achieve" || popup.type === "hidden" || popup.type === "gain" ? C.gold : C.pink, animation: "blink 1s step-end infinite" }}>
+              {popup.type === "down" ? "▼ LEVEL DOWN... ▼" : popup.type === "achieve" ? "★ ACHIEVEMENT! ★" : popup.type === "hidden" ? "★ HIDDEN QUEST! ★" : popup.type === "gain" ? `★ ${popup.title} ★` : "★ LEVEL UP! ★"}
             </div>
-            {popup.type === "achieve" || popup.type === "hidden" ? (
-              <div style={{ fontSize: 30, margin: "14px 0" }}>{popup.type === "hidden" ? "✨" : "🏆"}</div>
+            {popup.type === "achieve" || popup.type === "hidden" || popup.type === "gain" ? (
+              <div style={{ fontSize: 30, margin: "14px 0" }}>{popup.type === "hidden" ? "✨" : popup.type === "gain" ? "🎰" : "🏆"}</div>
             ) : (
               <div style={{ fontFamily: pixelFont, fontSize: 34, margin: "14px 0", color: C.ink }}>
                 LV {popup.level}
@@ -1896,6 +2451,10 @@ function BrowniePoints() {
             ) : popup.type === "hidden" ? (
               <div style={{ fontSize: 14, fontWeight: 700, color: C.dim, marginBottom: 18 }}>
                 You just cleared a hidden quest… no telling which one 😏 Check your XP!
+              </div>
+            ) : popup.type === "gain" ? (
+              <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 18 }}>
+                {popup.text}
               </div>
             ) : (
               <>
@@ -1927,3 +2486,14 @@ try {
 </script>
 </body>
 </html>
+  
+        
+    
+            
+                 
+             
+         
+                   
+                 
+                   
+       
