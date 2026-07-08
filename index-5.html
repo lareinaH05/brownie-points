@@ -719,13 +719,27 @@ function BrowniePoints() {
           (a) => a.taskId === taskId && newCount - (a.timesEarned || 0) * a.target === a.target
         )
       : null;
+    let newCoupons = null;
     if (after > before) {
       setPopup({ type: "up", level: after, reward: base.rewards[after] || "Reward TBD — stay tuned 👀" });
+      const wins = [];
+      for (let lv = before + 1; lv <= after; lv++) {
+        wins.push({
+          id: uid(),
+          questName: `LV${lv} unlocked ⭐`,
+          reward: base.rewards[lv] || "Reward TBD — stay tuned 👀",
+          revealed: true,
+          useDate: null,
+          time: now(),
+          ts: Date.now(),
+          status: "won",
+        });
+      }
+      newCoupons = [...wins, ...(base.coupons || [])].slice(0, 100);
     } else if (hitAch) {
       setPopup({ type: "achieve", name: `${name} ×${hitAch.target}`, reward: hitAch.reward });
     }
-    return { totalXP: newTotal, taskCounts: newCounts, log: [entry, ...base.log].slice(0, 200) };
-  };
+    return { totalXP: newTotal, taskCounts: newCounts, log: [entry, ...base.log].slice(0, 200), ...(newCoupons ? { coupons: newCoupons } : {}) };  };
 
   const addHiddenTask = () => {
     const xp = parseInt(hidXP, 10);
@@ -1762,13 +1776,7 @@ function BrowniePoints() {
                   }}
                 />
                 {unlocked ? (
-                  isClaimed ? (
-                    <span style={{ fontSize: 12, fontWeight: 900, color: C.mint, whiteSpace: "nowrap" }}>Claimed ✓</span>
-                  ) : (
-                    <button onClick={() => claimReward(lv)} style={btn(C.gold, C.ink, { padding: "6px 10px", whiteSpace: "nowrap" })}>
-                      Claim
-                    </button>
-                  )
+                  <span style={{ fontSize: 11, fontWeight: 900, color: C.gold, whiteSpace: "nowrap" }}>Sent as coupon ⭐</span>
                 ) : (
                   <span style={{ fontSize: 14 }}>🔒</span>
                 )}
